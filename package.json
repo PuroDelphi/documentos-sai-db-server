@@ -1,0 +1,44 @@
+{
+  "name": "supabase-firebird-sync",
+  "version": "1.0.0",
+  "description": "Servicio de sincronización entre Supabase y Firebird para facturas aprobadas",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "sync-thirds": "node src/scripts/syncThirdParties.js",
+    "sync-thirds-full": "node src/scripts/syncThirdParties.js full",
+    "sync-thirds-stats": "node src/scripts/syncThirdParties.js stats",
+    "sync-accounts": "node src/scripts/syncChartOfAccounts.js",
+    "sync-accounts-full": "node src/scripts/syncChartOfAccounts.js full",
+    "sync-accounts-stats": "node src/scripts/syncChartOfAccounts.js stats",
+    "sync-accounts-config": "node src/scripts/syncChartOfAccounts.js config",
+    "test-account-ranges": "node src/scripts/testAccountRanges.js",
+    "sync-products": "node src/scripts/syncProducts.js",
+    "sync-products-full": "node src/scripts/syncProducts.js full",
+    "sync-products-stats": "node src/scripts/syncProducts.js stats",
+    "sync-products-config": "node src/scripts/syncProducts.js config",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "supabase",
+    "firebird",
+    "sync",
+    "invoices",
+    "realtime"
+  ],
+  "author": "PuroDelphi",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "node-firebird": "^1.1.7",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0"
+  },
+  "optionalDependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
