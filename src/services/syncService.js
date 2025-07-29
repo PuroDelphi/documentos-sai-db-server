@@ -28,6 +28,8 @@ class SyncService {
       chartOfAccountsInterval: (parseInt(process.env.CHART_OF_ACCOUNTS_SYNC_INTERVAL) || 60) * 60 * 1000,
       productsInterval: (parseInt(process.env.PRODUCTS_SYNC_INTERVAL) || 45) * 60 * 1000,
       initialDelay: (parseInt(process.env.INITIAL_SYNC_DELAY) || 2) * 60 * 1000,
+      enableRecovery: process.env.ENABLE_INVOICE_RECOVERY !== 'false', // Por defecto habilitado
+      recoveryBatchSize: parseInt(process.env.RECOVERY_BATCH_SIZE) || 10, // Procesar de a 10 facturas
     };
   }
 
@@ -293,6 +295,63 @@ class SyncService {
   }
 
   /**
+   * Procesa facturas aprobadas pendientes de sincronización
+   * Se ejecuta al iniciar el servicio para recuperar facturas que no se procesaron
+   */
+  async processPendingApprovedInvoices() {
+    if (!this.syncConfig.enableRecovery) {
+      logger.info('Recuperación de facturas deshabilitada por configuración');
+      return { processed: 0, errors: 0 };
+    }
+
+    try {
+      logger.info('Iniciando recuperación de facturas aprobadas pendientes...');
+
+      // Obtener facturas pendientes
+      const pendingInvoices = await this.supabaseClient.getPendingApprovedInvoices();
+
+      if (pendingInvoices.length === 0) {
+        logger.info('No hay facturas aprobadas pendientes de sincronización');
+        return { processed: 0, errors: 0 };
+      }
+
+      let processed = 0;
+      let errors = 0;
+      const batchSize = this.syncConfig.recoveryBatchSize;
+
+      // Procesar en lotes para evitar sobrecargar el sistema
+      for (let i = 0; i < pendingInvoices.length; i += batchSize) {
+        const batch = pendingInvoices.slice(i, i + batchSize);
+        logger.info(`Procesando lote ${Math.floor(i / batchSize) + 1} de ${Math.ceil(pendingInvoices.length / batchSize)} (${batch.length} facturas)`);
+
+        for (const invoice of batch) {
+          try {
+            await this.processApprovedInvoice(invoice);
+            processed++;
+            logger.info(`Factura recuperada exitosamente: ${invoice.invoice_number} (${processed}/${pendingInvoices.length})`);
+          } catch (error) {
+            errors++;
+            logger.error(`Error recuperando factura ${invoice.invoice_number}:`, error.message);
+          }
+        }
+
+        // Pausa entre lotes para no sobrecargar el sistema
+        if (i + batchSize < pendingInvoices.length) {
+          logger.info('Pausa entre lotes de recuperación...');
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 segundos de pausa
+        }
+      }
+
+      logger.info(`Recuperación completada: ${processed} facturas procesadas, ${errors} errores`);
+      return { processed, errors };
+
+    } catch (error) {
+      logger.error('Error en proceso de recuperación de facturas:', error);
+      return { processed: 0, errors: 1 };
+    }
+  }
+
+  /**
    * Procesa una factura aprobada
    */
   async processApprovedInvoice(invoice) {
@@ -482,7 +541,15 @@ class SyncService {
       await this.chartOfAccountsSyncService.initialize();
       await this.productSyncService.initialize();
 
-      // Configurar listener de facturas
+      // Procesar facturas aprobadas pendientes (recuperación)
+      logger.info('Verificando facturas aprobadas pendientes de sincronización...');
+      const recoveryResult = await this.processPendingApprovedInvoices();
+
+      if (recoveryResult.processed > 0) {
+        logger.info(`Recuperación completada: ${recoveryResult.processed} facturas sincronizadas, ${recoveryResult.errors} errores`);
+      }
+
+      // Configurar listener de facturas para nuevos cambios
       this.supabaseClient.setupRealtimeListener(async (invoice) => {
         await this.processApprovedInvoice(invoice);
       });
@@ -491,6 +558,7 @@ class SyncService {
       await this.startBackgroundSync();
 
       logger.info('Servicio de sincronización iniciado y escuchando cambios...');
+      logger.info(`Recuperación de facturas: ${this.syncConfig.enableRecovery ? 'HABILITADA' : 'DESHABILITADA'}`);
       logger.info(`Sincronización de terceros programada cada ${this.syncConfig.thirdPartiesInterval / 60000} minutos`);
       logger.info(`Sincronización de cuentas programada cada ${this.syncConfig.chartOfAccountsInterval / 60000} minutos`);
       logger.info(`Sincronización de productos programada cada ${this.syncConfig.productsInterval / 60000} minutos`);

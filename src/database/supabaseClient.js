@@ -103,6 +103,42 @@ class SupabaseClient {
   }
 
   /**
+   * Obtiene facturas aprobadas que no han sido sincronizadas
+   * @returns {Promise<Array>} - Array de facturas pendientes de sincronización
+   */
+  async getPendingApprovedInvoices() {
+    try {
+      const { data: invoices, error } = await this.client
+        .from('invoices')
+        .select('*')
+        .eq('estado', 'APROBADO')
+        .or('service_response.is.null,service_response.neq.Ok')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        throw new Error(`Error obteniendo facturas pendientes: ${error.message}`);
+      }
+
+      logger.info(`Encontradas ${invoices.length} facturas aprobadas pendientes de sincronización`);
+
+      if (invoices.length > 0) {
+        logger.info('Facturas pendientes:', invoices.map(inv => ({
+          id: inv.id,
+          invoice_number: inv.invoice_number,
+          estado: inv.estado,
+          service_response: inv.service_response,
+          fecha_hora_sync: inv.fecha_hora_sync
+        })));
+      }
+
+      return invoices;
+    } catch (error) {
+      logger.error('Error obteniendo facturas pendientes:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Actualiza el estado y respuesta de una factura
    * @param {number} invoiceId - ID de la factura
    * @param {string} estado - Nuevo estado ('SINCRONIZADO' o 'ERROR')

@@ -18,6 +18,7 @@
     "sync-products-full": "node src/scripts/syncProducts.js full",
     "sync-products-stats": "node src/scripts/syncProducts.js stats",
     "sync-products-config": "node src/scripts/syncProducts.js config",
+    "test-recovery": "node src/scripts/testRecovery.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

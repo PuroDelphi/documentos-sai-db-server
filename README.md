@@ -5,6 +5,7 @@ Este servicio sincroniza automáticamente las facturas aprobadas desde Supabase 
 ## 🚀 Características
 
 - **Sincronización en tiempo real** usando Supabase Realtime
+- **Recuperación automática** de facturas pendientes al iniciar el servicio
 - **Mapeo automático** de datos entre estructuras diferentes
 - **Manejo de transacciones** para garantizar integridad de datos
 - **Gestión automática de consecutivos** en TIPDOC
@@ -131,6 +132,12 @@ npm run sync-products-stats
 npm run sync-products-config
 ```
 
+### Prueba de Recuperación de Facturas
+```bash
+# Probar la funcionalidad de recuperación de facturas pendientes
+npm run test-recovery
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -152,12 +159,28 @@ npm run sync-products-config
 
 ## 🔄 Flujo de Procesamiento
 
+### Sincronización en Tiempo Real
 1. **Detección**: Supabase Realtime detecta cambio en `invoices.estado = "APROBADO"`
 2. **Obtención**: Se obtienen datos completos (invoice + items + entries)
 3. **Validación**: Se verifica que exista tipo FIA en TIPDOC
 4. **Mapeo**: Se transforman los datos al formato Firebird
 5. **Inserción**: Se insertan datos en CARPROEN y CARPRODE
 6. **Actualización**: Se actualiza consecutivo en TIPDOC si es necesario
+
+### Recuperación de Facturas Pendientes
+Al iniciar el servicio, se ejecuta automáticamente un proceso de recuperación que:
+
+1. **Búsqueda**: Identifica facturas con `estado = "APROBADO"` y `service_response != "Ok"`
+2. **Procesamiento por lotes**: Procesa las facturas en grupos configurables (por defecto 10)
+3. **Sincronización**: Aplica el mismo flujo de procesamiento que las facturas en tiempo real
+4. **Pausa entre lotes**: Incluye pausas para no sobrecargar el sistema
+5. **Reporte**: Genera un reporte final con facturas procesadas y errores
+
+**Configuración de recuperación:**
+```env
+ENABLE_INVOICE_RECOVERY=true    # Habilitar/deshabilitar recuperación
+RECOVERY_BATCH_SIZE=10          # Número de facturas por lote
+```
 
 ## 📝 Logs
 
