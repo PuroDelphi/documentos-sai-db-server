@@ -58,13 +58,15 @@ async function testInvcConfiguration() {
     logger.info(`Configuración USE_INVOICE_NUMBER_FOR_INVC: ${process.env.USE_INVOICE_NUMBER_FOR_INVC || 'no definida (false por defecto)'}`);
     logger.info(`Configuración DEFAULT_PROJECT_CODE: ${process.env.DEFAULT_PROJECT_CODE || 'no definida'}`);
     logger.info(`Configuración DEFAULT_ACTIVITY_CODE: ${process.env.DEFAULT_ACTIVITY_CODE || 'no definida'}`);
+    logger.info(`Configuración DOCUMENT_TYPE: ${process.env.DOCUMENT_TYPE || 'no definida (FIA por defecto)'}`);
 
     // Probar mapeo de CARPROEN
     logger.info('\n1. Probando mapeo de CARPROEN...');
     const carproenData = dataMapper.mapToCarproen(mockInvoiceData, mockBatch);
     logger.info('CARPROEN mapeado exitosamente');
 
-    // Verificar fechas en CARPROEN
+    // Verificar fechas y tipo en CARPROEN
+    logger.info(`   TIPO: ${carproenData.TIPO} (tipo de documento configurado)`);
     logger.info(`   FECHA: ${carproenData.FECHA?.toISOString().split('T')[0]} (debe ser ${mockInvoiceData.invoice.date})`);
     logger.info(`   DUEDATE: ${carproenData.DUEDATE?.toISOString().split('T')[0]} (debe ser ${mockInvoiceData.invoice.date})`);
 
@@ -87,7 +89,8 @@ async function testInvcConfiguration() {
     logger.info(`\n3. Resultados del mapeo CARPRODE (${carprodeData.length} registros):`);
     carprodeData.forEach((entry, index) => {
       logger.info(`   Registro ${index + 1}:`);
-      logger.info(`     TIPO: ${entry.TIPO}`);
+      logger.info(`     TIPO: ${entry.TIPO} (tipo de documento)`);
+      logger.info(`     CRUCE: ${entry.CRUCE} (debe ser igual a TIPO)`);
       logger.info(`     BATCH: ${entry.BATCH}`);
       logger.info(`     INVC: ${entry.INVC} ← ${dataMapper.useInvoiceNumberForInvc ? 'invoice_number' : 'batch'}`);
       logger.info(`     ACCT: ${entry.ACCT}`);
@@ -104,6 +107,13 @@ async function testInvcConfiguration() {
         logger.info(`     ✅ DUEDATE correcta`);
       } else {
         logger.warn(`     ⚠️  DUEDATE incorrecta`);
+      }
+
+      // Verificar consistencia TIPO/CRUCE
+      if (entry.TIPO === entry.CRUCE) {
+        logger.info(`     ✅ TIPO y CRUCE consistentes`);
+      } else {
+        logger.warn(`     ⚠️  TIPO y CRUCE inconsistentes`);
       }
       logger.info('');
     });

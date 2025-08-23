@@ -10,6 +10,9 @@ class DataMapper {
     this.defaultProjectCode = process.env.DEFAULT_PROJECT_CODE || null;
     this.defaultActivityCode = process.env.DEFAULT_ACTIVITY_CODE || null;
 
+    // Configuración del tipo de documento
+    this.documentType = process.env.DOCUMENT_TYPE || 'FIA';
+
     // Validar longitudes según esquema de BD
     if (this.defaultProjectCode && this.defaultProjectCode.length > 10) {
       logger.warn(`DEFAULT_PROJECT_CODE truncado de ${this.defaultProjectCode.length} a 10 caracteres`);
@@ -21,9 +24,24 @@ class DataMapper {
       this.defaultActivityCode = this.defaultActivityCode.substring(0, 3);
     }
 
-    logger.info(`Configuración INVC: ${this.useInvoiceNumberForInvc ? 'usar invoice_number de Supabase' : 'usar número de batch/FIA'}`);
+    // Validar longitud del tipo de documento
+    if (this.documentType.length > 3) {
+      logger.warn(`DOCUMENT_TYPE truncado de ${this.documentType.length} a 3 caracteres`);
+      this.documentType = this.documentType.substring(0, 3);
+    }
+
+    logger.info(`Configuración INVC: ${this.useInvoiceNumberForInvc ? 'usar invoice_number de Supabase' : `usar número de batch/${this.documentType}`}`);
+    logger.info(`Tipo de documento: ${this.documentType}`);
     logger.info(`Proyecto predeterminado: ${this.defaultProjectCode || 'no configurado'}`);
     logger.info(`Actividad predeterminada: ${this.defaultActivityCode || 'no configurada'}`);
+  }
+
+  /**
+   * Obtiene el tipo de documento configurado
+   * @returns {string} - Tipo de documento (ej: 'FIA', 'FAC', etc.)
+   */
+  getDocumentType() {
+    return this.documentType;
   }
 
   /**
@@ -76,7 +94,7 @@ class DataMapper {
       const carproenData = {
         E: 1,
         S: 1,
-        TIPO: 'FIA',
+        TIPO: this.documentType,
         BATCH: batch,
         ID_N: (invoice.num_identificacion || '').substring(0, 30),
         FECHA: invoiceDate,
@@ -175,13 +193,13 @@ class DataMapper {
 
         return {
           CONTEO: null, // Se asignará automáticamente por la BD
-          TIPO: 'FIA',
+          TIPO: this.documentType,
           BATCH: batch,
           ID_N: (entry.third_party_nit || invoice.num_identificacion || '').substring(0, 30),
           ACCT: parseFloat(entry.account_code) || 0,
           E: 1,
           S: 1,
-          CRUCE: 'FIA'.substring(0, 3), // Mismo valor que TIPO de CAPROEN
+          CRUCE: this.documentType.substring(0, 3), // Mismo valor que TIPO de CAPROEN
           INVC: invcValue, // Configurable: invoice_number o batch
           FECHA: entryDate, // Fecha de la entrada contable
           DUEDATE: invoiceDate, // Fecha de vencimiento = fecha de la factura

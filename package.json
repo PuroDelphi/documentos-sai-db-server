@@ -22,6 +22,7 @@
     "test-invc-config": "node src/scripts/testInvcConfiguration.js",
     "test-dates": "node src/scripts/testDateHandling.js",
     "test-project-activity": "node src/scripts/testProjectActivity.js",
+    "test-document-type": "node src/scripts/testDocumentType.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

@@ -48,17 +48,22 @@ class SyncService {
   }
 
   /**
-   * Verifica que el tipo FIA exista en TIPDOC, si no lo crea
+   * Verifica que el tipo de documento configurado exista en TIPDOC, si no lo crea
    */
   async ensureTipdocExists() {
     try {
+      const documentType = this.dataMapper.getDocumentType();
+
       const existingType = await this.firebirdClient.query(
         'SELECT * FROM TIPDOC WHERE CLASE = ? AND E = ? AND S = ?',
-        ['FIA', 1, 1]
+        [documentType, 1, 1]
       );
 
       if (existingType.length === 0) {
-        logger.info('Tipo FIA no existe en TIPDOC, creándolo...');
+        logger.info(`Tipo ${documentType} no existe en TIPDOC, creándolo...`);
+
+        // Generar descripción basada en el tipo de documento
+        const description = this.generateDocumentDescription(documentType);
 
         await this.firebirdClient.query(`
           INSERT INTO TIPDOC (
@@ -69,22 +74,40 @@ class SyncService {
             TIPOCONSUMO, DOC_ELEC_POS, DIST_MANDANTE, ID_N
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          'FP', 'FIA', 1, 1, 1, 'FACTURA POR PAGAR IA', null, null,
+          'FP', documentType, 1, 1, 1, description, null, null,
           null, null, null, null, null, 'N', 'N', '', 0, 0, 'N',
           null, null, 0, 'N', 'N', null, null
         ]);
 
-        logger.info('Tipo FIA creado exitosamente en TIPDOC con consecutivo inicial 1');
+        logger.info(`Tipo ${documentType} creado exitosamente en TIPDOC con consecutivo inicial 1`);
       } else {
-        logger.info('Tipo FIA ya existe en TIPDOC');
+        logger.info(`Tipo ${documentType} ya existe en TIPDOC`);
         // Verificar que el consecutivo sea válido
         const currentConsecutive = existingType[0]?.CONSECUTIVO || 1;
-        logger.info(`Consecutivo actual en TIPDOC para FIA: ${currentConsecutive}`);
+        logger.info(`Consecutivo actual en TIPDOC para ${documentType}: ${currentConsecutive}`);
       }
     } catch (error) {
-      logger.error('Error verificando/creando tipo FIA:', error);
+      const documentType = this.dataMapper.getDocumentType();
+      logger.error(`Error verificando/creando tipo ${documentType}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Genera una descripción para el tipo de documento
+   */
+  generateDocumentDescription(documentType) {
+    const descriptions = {
+      'FIA': 'FACTURA POR PAGAR IA',
+      'FAC': 'FACTURA DE VENTA',
+      'CXP': 'CUENTA POR PAGAR',
+      'CXC': 'CUENTA POR COBRAR',
+      'REC': 'RECIBO DE CAJA',
+      'COM': 'COMPROBANTE',
+      'NOT': 'NOTA CONTABLE'
+    };
+
+    return descriptions[documentType] || `DOCUMENTO TIPO ${documentType}`;
   }
 
   /**
@@ -179,13 +202,15 @@ class SyncService {
    */
   async getNextBatch() {
     try {
+      const documentType = this.dataMapper.getDocumentType();
+
       const result = await this.firebirdClient.query(
         'SELECT CONSECUTIVO FROM TIPDOC WHERE CLASE = ? AND E = ? AND S = ?',
-        ['FIA', 1, 1]
+        [documentType, 1, 1]
       );
 
       if (result.length === 0) {
-        throw new Error('Tipo FIA no encontrado en TIPDOC');
+        throw new Error(`Tipo ${documentType} no encontrado en TIPDOC`);
       }
 
       const consecutivo = result[0]?.CONSECUTIVO || 1;
@@ -206,10 +231,12 @@ class SyncService {
    */
   async validateConsecutive(consecutivo) {
     try {
-      // Verificar el máximo BATCH usado en CARPROEN para tipo FIA
+      const documentType = this.dataMapper.getDocumentType();
+
+      // Verificar el máximo BATCH usado en CARPROEN para el tipo de documento configurado
       const result = await this.firebirdClient.query(
         'SELECT MAX(BATCH) as MAX_BATCH FROM CARPROEN WHERE TIPO = ?',
-        ['FIA']
+        [documentType]
       );
 
       const maxUsedBatch = result[0]?.MAX_BATCH || 0;
@@ -223,8 +250,8 @@ class SyncService {
         await this.firebirdClient.query(`
           UPDATE TIPDOC
           SET CONSECUTIVO = ?
-          WHERE CLASE = 'FIA' AND E = 1 AND S = 1
-        `, [correctedConsecutive]);
+          WHERE CLASE = ? AND E = 1 AND S = 1
+        `, [correctedConsecutive, documentType]);
 
         return correctedConsecutive;
       }
@@ -279,15 +306,16 @@ class SyncService {
    */
   async updateConsecutive(usedBatch) {
     try {
+      const documentType = this.dataMapper.getDocumentType();
       const nextConsecutive = usedBatch + 1;
 
       await this.firebirdClient.query(`
         UPDATE TIPDOC
         SET CONSECUTIVO = ?
-        WHERE CLASE = 'FIA' AND E = 1 AND S = 1
-      `, [nextConsecutive]);
+        WHERE CLASE = ? AND E = 1 AND S = 1
+      `, [nextConsecutive, documentType]);
 
-      logger.info(`Consecutivo actualizado de ${usedBatch} a ${nextConsecutive} para tipo FIA`);
+      logger.info(`Consecutivo actualizado de ${usedBatch} a ${nextConsecutive} para tipo ${documentType}`);
     } catch (error) {
       logger.error('Error actualizando consecutivo:', error);
       throw error;

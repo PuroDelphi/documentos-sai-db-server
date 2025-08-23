@@ -156,11 +156,17 @@ npm run test-dates
 npm run test-project-activity
 ```
 
+### Prueba de Tipo de Documento
+```bash
+# Probar la configuración del tipo de documento
+npm run test-document-type
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
 - `E, S = 1, 1` (valores fijos)
-- `TIPO = "FIA"` (Factura IA)
+- `TIPO = configurable` (tipo de documento, por defecto "FIA")
 - `BATCH = secuencial automático`
 - `ID_N = num_identificacion`
 - `FECHA = date` (fecha exacta de la factura, sin cambios de zona horaria)
@@ -169,7 +175,8 @@ npm run test-project-activity
 - `LETRAS = conversión automática a letras`
 
 ### CARPRODE ← accounting_entries
-- `TIPO = "FIA"`
+- `TIPO = configurable` (tipo de documento, por defecto "FIA")
+- `CRUCE = configurable` (mismo valor que TIPO)
 - `BATCH = mismo del encabezado`
 - `ACCT = account_code`
 - `DEBIT = debit`
@@ -209,6 +216,59 @@ USE_INVOICE_NUMBER_FOR_INVC=true
 - Los valores se truncan automáticamente si exceden este límite
 - El cambio de configuración afecta solo a las nuevas facturas procesadas
 - Se recomienda mantener consistencia en la configuración
+
+## 📄 Configuración de Tipo de Documento
+
+El tipo de documento determina cómo se clasifican las facturas en el sistema Firebird:
+
+### Configuración Disponible
+
+```env
+# Tipo de documento para CARPROEN, CARPRODE y TIPDOC
+DOCUMENT_TYPE=FIA                   # Por defecto: FIA (Factura IA)
+```
+
+### Comportamiento
+
+- **Creación automática**: Si el tipo no existe en TIPDOC, se crea automáticamente
+- **Consecutivos independientes**: Cada tipo tiene su propio consecutivo
+- **Validación**: Se trunca automáticamente a 3 caracteres máximo
+- **Consistencia**: TIPO y CRUCE en CARPRODE siempre tienen el mismo valor
+
+### Tipos Comunes
+
+| Código | Descripción | Uso Típico |
+|--------|-------------|------------|
+| `FIA` | Factura IA | Facturas por pagar (por defecto) |
+| `FAC` | Factura de Venta | Facturas de venta |
+| `CXP` | Cuenta por Pagar | Cuentas por pagar |
+| `CXC` | Cuenta por Cobrar | Cuentas por cobrar |
+| `REC` | Recibo de Caja | Recibos |
+| `COM` | Comprobante | Comprobantes contables |
+| `NOT` | Nota Contable | Notas contables |
+
+### Esquema de Base de Datos
+
+- `CARPROEN.TIPO`: CHAR(3) - Tipo de documento
+- `CARPRODE.TIPO`: CHAR(3) - Tipo de documento (mismo que CARPROEN)
+- `CARPRODE.CRUCE`: CHAR(3) - Referencia cruzada (mismo que TIPO)
+- `TIPDOC.CLASE`: CHAR(3) - Clasificación en tabla de tipos
+
+### Ejemplos
+
+```env
+# Ejemplo 1: Facturas IA (por defecto)
+DOCUMENT_TYPE=FIA
+# Resultado: Facturas por pagar IA
+
+# Ejemplo 2: Facturas de venta
+DOCUMENT_TYPE=FAC
+# Resultado: Facturas de venta
+
+# Ejemplo 3: Tipo personalizado
+DOCUMENT_TYPE=MIS
+# Resultado: Documento tipo MIS (se crea automáticamente)
+```
 
 ## ⚙️ Configuración de Proyecto y Actividad
 
