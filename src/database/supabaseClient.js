@@ -113,7 +113,7 @@ class SupabaseClient {
         .select('*')
         .eq('estado', 'APROBADO')
         .or('service_response.is.null,service_response.neq.Ok')
-        .order('created_at', { ascending: true });
+        .order('date', { ascending: true });
 
       if (error) {
         throw new Error(`Error obteniendo facturas pendientes: ${error.message}`);
@@ -127,7 +127,8 @@ class SupabaseClient {
           invoice_number: inv.invoice_number,
           estado: inv.estado,
           service_response: inv.service_response,
-          fecha_hora_sync: inv.fecha_hora_sync
+          fecha_hora_sync: inv.fecha_hora_sync,
+          date: inv.date
         })));
       }
 
