@@ -2,6 +2,12 @@ const { convertToWords } = require('../utils/numberToWords');
 const logger = require('../utils/logger');
 
 class DataMapper {
+  constructor() {
+    // Configuración para el campo INVC
+    this.useInvoiceNumberForInvc = process.env.USE_INVOICE_NUMBER_FOR_INVC === 'true';
+
+    logger.info(`Configuración INVC: ${this.useInvoiceNumberForInvc ? 'usar invoice_number de Supabase' : 'usar número de batch/FIA'}`);
+  }
   /**
    * Mapea los datos de Supabase a la estructura de CARPROEN
    * @param {Object} invoiceData - Datos de la factura de Supabase
@@ -86,10 +92,20 @@ class DataMapper {
     const { invoice, entries } = invoiceData;
     
     try {
-      const carprodeData = entries.map((entry, index) => {
+      const carprodeData = entries.map((entry) => {
         const debit = parseFloat(entry.debit) || 0;
         const credit = parseFloat(entry.credit) || 0;
         const saldo = credit - debit;
+
+        // Determinar el valor del campo INVC según la configuración
+        const invcValue = this.useInvoiceNumberForInvc
+          ? (invoice.invoice_number || '').substring(0, 15)
+          : batch.toString().substring(0, 15);
+
+        // Log del valor INVC solo para la primera entrada (evitar spam)
+        if (entries.indexOf(entry) === 0) {
+          logger.debug(`Campo INVC configurado como: ${invcValue} (${this.useInvoiceNumberForInvc ? 'invoice_number' : 'batch'})`);
+        }
 
         return {
           CONTEO: null, // Se asignará automáticamente por la BD
@@ -100,7 +116,7 @@ class DataMapper {
           E: 1,
           S: 1,
           CRUCE: 'FIA'.substring(0, 3), // Mismo valor que TIPO de CAPROEN
-          INVC: batch.toString().substring(0, 15), // Mismo valor que BATCH de CAPROEN
+          INVC: invcValue, // Configurable: invoice_number o batch
           FECHA: new Date(entry.entry_date),
           DUEDATE: new Date(entry.entry_date),
           DPTO: 0,

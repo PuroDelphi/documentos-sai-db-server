@@ -138,6 +138,12 @@ npm run sync-products-config
 npm run test-recovery
 ```
 
+### Prueba de Configuración INVC
+```bash
+# Probar la configuración del campo INVC en CARPRODE
+npm run test-invc-config
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -156,6 +162,36 @@ npm run test-recovery
 - `DEBIT = debit`
 - `CREDIT = credit`
 - `DESCRIPCION = description`
+- `INVC = configurable` (ver configuración INVC)
+
+## ⚙️ Configuración del Campo INVC
+
+El campo `INVC` en la tabla `CARPRODE` de Firebird puede configurarse para usar diferentes valores:
+
+### Opciones Disponibles
+
+**Opción 1: Usar número de batch/FIA (por defecto)**
+```env
+USE_INVOICE_NUMBER_FOR_INVC=false
+```
+- Envía el número consecutivo de FIA generado automáticamente
+- Comportamiento actual del sistema
+- Garantiza unicidad numérica secuencial
+
+**Opción 2: Usar invoice_number de Supabase**
+```env
+USE_INVOICE_NUMBER_FOR_INVC=true
+```
+- Envía el número de factura original de Supabase
+- Mantiene la referencia directa al número de factura
+- Útil para trazabilidad y reconciliación
+
+### Consideraciones
+
+- El campo `INVC` tiene un límite de 15 caracteres
+- Los valores se truncan automáticamente si exceden este límite
+- El cambio de configuración afecta solo a las nuevas facturas procesadas
+- Se recomienda mantener consistencia en la configuración
 
 ## 🔄 Flujo de Procesamiento
 
