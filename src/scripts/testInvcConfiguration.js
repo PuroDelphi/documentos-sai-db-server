@@ -56,7 +56,9 @@ async function testInvcConfiguration() {
     
     // Mostrar configuración actual
     logger.info(`Configuración USE_INVOICE_NUMBER_FOR_INVC: ${process.env.USE_INVOICE_NUMBER_FOR_INVC || 'no definida (false por defecto)'}`);
-    
+    logger.info(`Configuración DEFAULT_PROJECT_CODE: ${process.env.DEFAULT_PROJECT_CODE || 'no definida'}`);
+    logger.info(`Configuración DEFAULT_ACTIVITY_CODE: ${process.env.DEFAULT_ACTIVITY_CODE || 'no definida'}`);
+
     // Probar mapeo de CARPROEN
     logger.info('\n1. Probando mapeo de CARPROEN...');
     const carproenData = dataMapper.mapToCarproen(mockInvoiceData, mockBatch);
@@ -94,6 +96,8 @@ async function testInvcConfiguration() {
       logger.info(`     CREDIT: ${entry.CREDIT}`);
       logger.info(`     FECHA: ${entry.FECHA?.toISOString().split('T')[0]} (fecha entrada)`);
       logger.info(`     DUEDATE: ${entry.DUEDATE?.toISOString().split('T')[0]} (debe ser ${mockInvoiceData.invoice.date})`);
+      logger.info(`     PROYECTO: "${entry.PROYECTO || ''}" (${entry.PROYECTO ? 'configurado' : 'vacío'})`);
+      logger.info(`     ACTIVIDAD: "${entry.ACTIVIDAD || ''}" (${entry.ACTIVIDAD ? 'configurado' : 'vacío'})`);
 
       // Verificar DUEDATE
       if (entry.DUEDATE?.toISOString().split('T')[0] === mockInvoiceData.invoice.date) {

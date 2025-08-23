@@ -6,7 +6,24 @@ class DataMapper {
     // Configuración para el campo INVC
     this.useInvoiceNumberForInvc = process.env.USE_INVOICE_NUMBER_FOR_INVC === 'true';
 
+    // Configuración de proyecto y actividad predeterminados
+    this.defaultProjectCode = process.env.DEFAULT_PROJECT_CODE || null;
+    this.defaultActivityCode = process.env.DEFAULT_ACTIVITY_CODE || null;
+
+    // Validar longitudes según esquema de BD
+    if (this.defaultProjectCode && this.defaultProjectCode.length > 10) {
+      logger.warn(`DEFAULT_PROJECT_CODE truncado de ${this.defaultProjectCode.length} a 10 caracteres`);
+      this.defaultProjectCode = this.defaultProjectCode.substring(0, 10);
+    }
+
+    if (this.defaultActivityCode && this.defaultActivityCode.length > 3) {
+      logger.warn(`DEFAULT_ACTIVITY_CODE truncado de ${this.defaultActivityCode.length} a 3 caracteres`);
+      this.defaultActivityCode = this.defaultActivityCode.substring(0, 3);
+    }
+
     logger.info(`Configuración INVC: ${this.useInvoiceNumberForInvc ? 'usar invoice_number de Supabase' : 'usar número de batch/FIA'}`);
+    logger.info(`Proyecto predeterminado: ${this.defaultProjectCode || 'no configurado'}`);
+    logger.info(`Actividad predeterminada: ${this.defaultActivityCode || 'no configurada'}`);
   }
 
   /**
@@ -139,10 +156,18 @@ class DataMapper {
           ? (invoice.invoice_number || '').substring(0, 15)
           : batch.toString().substring(0, 15);
 
-        // Log del valor INVC solo para la primera entrada (evitar spam)
+        // Log de configuraciones solo para la primera entrada (evitar spam)
         if (entries.indexOf(entry) === 0) {
           logger.debug(`Campo INVC configurado como: ${invcValue} (${this.useInvoiceNumberForInvc ? 'invoice_number' : 'batch'})`);
           logger.debug(`Fecha de factura para CARPRODE: ${invoice.date} -> ${invoiceDate?.toISOString().split('T')[0]}`);
+
+          if (this.defaultProjectCode) {
+            logger.debug(`Proyecto predeterminado aplicado: ${this.defaultProjectCode}`);
+          }
+
+          if (this.defaultActivityCode) {
+            logger.debug(`Actividad predeterminada aplicada: ${this.defaultActivityCode}`);
+          }
         }
 
         // Parsear fecha de entrada contable
@@ -162,7 +187,8 @@ class DataMapper {
           DUEDATE: invoiceDate, // Fecha de vencimiento = fecha de la factura
           DPTO: 0,
           CCOST: 0,
-          ACTIVIDAD: ''.substring(0, 3),
+          ACTIVIDAD: this.defaultActivityCode || '', // Código de actividad predeterminado
+          PROYECTO: this.defaultProjectCode || '', // Código de proyecto predeterminado
           DESCRIPCION: (entry.description || '').substring(0, 40),
           DIAS: 0,
           DESTINO: 1,
@@ -173,7 +199,6 @@ class DataMapper {
           CONCEPTO_IMP: 0,
           BANCO: null,
           CHEQUE: null,
-          PROYECTO: ''.substring(0, 10),
           CONCEPTO_PAGO: null,
           ID_TIPOCARTERA: null,
           INVC_ENTERO: 0,

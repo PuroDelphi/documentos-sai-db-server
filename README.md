@@ -150,6 +150,12 @@ npm run test-invc-config
 npm run test-dates
 ```
 
+### Prueba de Proyecto y Actividad
+```bash
+# Probar la configuración de códigos predeterminados de proyecto y actividad
+npm run test-project-activity
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -172,6 +178,8 @@ npm run test-dates
 - `INVC = configurable` (ver configuración INVC)
 - `FECHA = entry_date` (fecha de la entrada contable)
 - `DUEDATE = invoice.date` (fecha de vencimiento = fecha de la factura)
+- `PROYECTO = configurable` (código de proyecto predeterminado)
+- `ACTIVIDAD = configurable` (código de actividad predeterminado)
 
 ## ⚙️ Configuración del Campo INVC
 
@@ -201,6 +209,49 @@ USE_INVOICE_NUMBER_FOR_INVC=true
 - Los valores se truncan automáticamente si exceden este límite
 - El cambio de configuración afecta solo a las nuevas facturas procesadas
 - Se recomienda mantener consistencia en la configuración
+
+## ⚙️ Configuración de Proyecto y Actividad
+
+Los campos `PROYECTO` y `ACTIVIDAD` en la tabla `CARPRODE` pueden configurarse con valores predeterminados:
+
+### Configuración Disponible
+
+```env
+# Códigos predeterminados para todos los registros CARPRODE
+DEFAULT_PROJECT_CODE=PROJ001        # Máximo 10 caracteres
+DEFAULT_ACTIVITY_CODE=ACT           # Máximo 3 caracteres
+```
+
+### Comportamiento
+
+- **Si están configurados**: Todos los registros CARPRODE tendrán estos valores
+- **Si están vacíos**: Los campos se envían como cadenas vacías
+- **Truncamiento automático**: Los valores se truncan si exceden los límites
+- **Consistencia**: Todos los registros de una factura tendrán los mismos valores
+
+### Esquema de Base de Datos
+
+- `PROYECTO`: CHAR(10) - Código de proyecto (máximo 10 caracteres)
+- `ACTIVIDAD`: CHAR(3) - Código de actividad (máximo 3 caracteres)
+
+### Ejemplos
+
+```env
+# Ejemplo 1: Sin configuración
+DEFAULT_PROJECT_CODE=
+DEFAULT_ACTIVITY_CODE=
+# Resultado: campos vacíos
+
+# Ejemplo 2: Configuración normal
+DEFAULT_PROJECT_CODE=PROJ001
+DEFAULT_ACTIVITY_CODE=ACT
+# Resultado: PROYECTO="PROJ001", ACTIVIDAD="ACT"
+
+# Ejemplo 3: Con truncamiento
+DEFAULT_PROJECT_CODE=PROYECTO_MUY_LARGO
+DEFAULT_ACTIVITY_CODE=ACTIVIDAD_LARGA
+# Resultado: PROYECTO="PROYECTO_M", ACTIVIDAD="ACT"
+```
 
 ## 🔄 Flujo de Procesamiento
 
