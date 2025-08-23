@@ -13,7 +13,7 @@ async function testInvcConfiguration() {
       invoice: {
         id: 123,
         invoice_number: 'FAC-2024-001',
-        date: '2024-01-15',
+        date: '2024-01-15', // Fecha que debe mantenerse exacta
         billing_name: 'Cliente de Prueba',
         num_identificacion: '12345678-9',
         total: 1000000,
@@ -61,6 +61,22 @@ async function testInvcConfiguration() {
     logger.info('\n1. Probando mapeo de CARPROEN...');
     const carproenData = dataMapper.mapToCarproen(mockInvoiceData, mockBatch);
     logger.info('CARPROEN mapeado exitosamente');
+
+    // Verificar fechas en CARPROEN
+    logger.info(`   FECHA: ${carproenData.FECHA?.toISOString().split('T')[0]} (debe ser ${mockInvoiceData.invoice.date})`);
+    logger.info(`   DUEDATE: ${carproenData.DUEDATE?.toISOString().split('T')[0]} (debe ser ${mockInvoiceData.invoice.date})`);
+
+    if (carproenData.FECHA?.toISOString().split('T')[0] === mockInvoiceData.invoice.date) {
+      logger.info('   ✅ FECHA correcta en CARPROEN');
+    } else {
+      logger.warn('   ⚠️  FECHA incorrecta en CARPROEN');
+    }
+
+    if (carproenData.DUEDATE?.toISOString().split('T')[0] === mockInvoiceData.invoice.date) {
+      logger.info('   ✅ DUEDATE correcta en CARPROEN');
+    } else {
+      logger.warn('   ⚠️  DUEDATE incorrecta en CARPROEN');
+    }
     
     // Probar mapeo de CARPRODE
     logger.info('\n2. Probando mapeo de CARPRODE...');
@@ -76,6 +92,15 @@ async function testInvcConfiguration() {
       logger.info(`     DESCRIPCION: ${entry.DESCRIPCION}`);
       logger.info(`     DEBIT: ${entry.DEBIT}`);
       logger.info(`     CREDIT: ${entry.CREDIT}`);
+      logger.info(`     FECHA: ${entry.FECHA?.toISOString().split('T')[0]} (fecha entrada)`);
+      logger.info(`     DUEDATE: ${entry.DUEDATE?.toISOString().split('T')[0]} (debe ser ${mockInvoiceData.invoice.date})`);
+
+      // Verificar DUEDATE
+      if (entry.DUEDATE?.toISOString().split('T')[0] === mockInvoiceData.invoice.date) {
+        logger.info(`     ✅ DUEDATE correcta`);
+      } else {
+        logger.warn(`     ⚠️  DUEDATE incorrecta`);
+      }
       logger.info('');
     });
 

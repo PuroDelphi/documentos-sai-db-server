@@ -144,6 +144,12 @@ npm run test-recovery
 npm run test-invc-config
 ```
 
+### Prueba de Manejo de Fechas
+```bash
+# Probar el manejo correcto de fechas sin cambios de zona horaria
+npm run test-dates
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -151,7 +157,8 @@ npm run test-invc-config
 - `TIPO = "FIA"` (Factura IA)
 - `BATCH = secuencial automático`
 - `ID_N = num_identificacion`
-- `FECHA = date`
+- `FECHA = date` (fecha exacta de la factura, sin cambios de zona horaria)
+- `DUEDATE = date` (fecha de vencimiento = fecha de la factura)
 - `TOTAL = total`
 - `LETRAS = conversión automática a letras`
 
@@ -163,6 +170,8 @@ npm run test-invc-config
 - `CREDIT = credit`
 - `DESCRIPCION = description`
 - `INVC = configurable` (ver configuración INVC)
+- `FECHA = entry_date` (fecha de la entrada contable)
+- `DUEDATE = invoice.date` (fecha de vencimiento = fecha de la factura)
 
 ## ⚙️ Configuración del Campo INVC
 

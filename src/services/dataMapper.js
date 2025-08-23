@@ -8,6 +8,37 @@ class DataMapper {
 
     logger.info(`Configuración INVC: ${this.useInvoiceNumberForInvc ? 'usar invoice_number de Supabase' : 'usar número de batch/FIA'}`);
   }
+
+  /**
+   * Convierte una fecha de string a Date manteniendo la fecha exacta sin cambios de zona horaria
+   * @param {string} dateString - Fecha en formato string (YYYY-MM-DD)
+   * @returns {Date} - Objeto Date con la fecha exacta
+   */
+  parseDate(dateString) {
+    if (!dateString) return null;
+
+    try {
+      // Si es solo fecha (YYYY-MM-DD), agregar hora local para evitar cambios de zona horaria
+      if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return new Date(dateString + 'T00:00:00');
+      }
+
+      // Si ya tiene hora, usar tal como está
+      const date = new Date(dateString);
+
+      // Verificar que la fecha sea válida
+      if (isNaN(date.getTime())) {
+        logger.warn(`Fecha inválida recibida: ${dateString}`);
+        return null;
+      }
+
+      logger.debug(`Fecha parseada: ${dateString} -> ${date.toISOString().split('T')[0]}`);
+      return date;
+    } catch (error) {
+      logger.error(`Error parseando fecha: ${dateString}`, error);
+      return null;
+    }
+  }
   /**
    * Mapea los datos de Supabase a la estructura de CARPROEN
    * @param {Object} invoiceData - Datos de la factura de Supabase
@@ -22,20 +53,23 @@ class DataMapper {
       const subtotal = parseFloat(invoice.subtotal) || 0;
       const tax = parseFloat(invoice.tax) || 0;
 
+      // Parsear la fecha de la factura correctamente
+      const invoiceDate = this.parseDate(invoice.date);
+
       const carproenData = {
         E: 1,
         S: 1,
         TIPO: 'FIA',
         BATCH: batch,
         ID_N: (invoice.num_identificacion || '').substring(0, 30),
-        FECHA: new Date(invoice.date),
+        FECHA: invoiceDate,
         TOTAL: total,
         USERNAME: 'SYSTEM'.substring(0, 10),
         FECHA_HORA: new Date().toLocaleString('es-CO').substring(0, 20),
         OBSERV: `Factura ${invoice.invoice_number} - ${invoice.billing_name}`.substring(0, 200),
         BANCO: ''.substring(0, 30),
         CHEQUE: ''.substring(0, 15),
-        DUEDATE: new Date(invoice.date),
+        DUEDATE: invoiceDate, // Usar la misma fecha de la factura
         LETRAS: convertToWords(total),
         IDVEND: 1,
         SHIPTO: 0,
@@ -90,8 +124,11 @@ class DataMapper {
    */
   mapToCarprode(invoiceData, batch) {
     const { invoice, entries } = invoiceData;
-    
+
     try {
+      // Parsear la fecha de la factura una sola vez
+      const invoiceDate = this.parseDate(invoice.date);
+
       const carprodeData = entries.map((entry) => {
         const debit = parseFloat(entry.debit) || 0;
         const credit = parseFloat(entry.credit) || 0;
@@ -105,7 +142,11 @@ class DataMapper {
         // Log del valor INVC solo para la primera entrada (evitar spam)
         if (entries.indexOf(entry) === 0) {
           logger.debug(`Campo INVC configurado como: ${invcValue} (${this.useInvoiceNumberForInvc ? 'invoice_number' : 'batch'})`);
+          logger.debug(`Fecha de factura para CARPRODE: ${invoice.date} -> ${invoiceDate?.toISOString().split('T')[0]}`);
         }
+
+        // Parsear fecha de entrada contable
+        const entryDate = this.parseDate(entry.entry_date);
 
         return {
           CONTEO: null, // Se asignará automáticamente por la BD
@@ -117,8 +158,8 @@ class DataMapper {
           S: 1,
           CRUCE: 'FIA'.substring(0, 3), // Mismo valor que TIPO de CAPROEN
           INVC: invcValue, // Configurable: invoice_number o batch
-          FECHA: new Date(entry.entry_date),
-          DUEDATE: new Date(entry.entry_date),
+          FECHA: entryDate, // Fecha de la entrada contable
+          DUEDATE: invoiceDate, // Fecha de vencimiento = fecha de la factura
           DPTO: 0,
           CCOST: 0,
           ACTIVIDAD: ''.substring(0, 3),
@@ -147,7 +188,7 @@ class DataMapper {
           DEBIT: debit,
           CUOTA: 1,
           FECHA_CONSIG: null,
-          FECHA_FACTURA: new Date(invoice.date),
+          FECHA_FACTURA: invoiceDate, // Fecha de la factura
           MAYOR_VALOR: null,
           VALOR_IMPUESTO: null,
           IMPORT: 'N',
