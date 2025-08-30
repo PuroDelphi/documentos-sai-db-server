@@ -1,11 +1,13 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
 const logger = require('../utils/logger');
+const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class ThirdPartySyncService {
   constructor() {
     this.firebirdClient = new FirebirdClient();
     this.supabaseClient = new SupabaseClient();
+    this.userUUID = validateAndGetUserUUID();
   }
 
   /**
@@ -30,6 +32,7 @@ class ThirdPartySyncService {
       const { data, error } = await this.supabaseClient.client
         .from('invoice_third_parties')
         .select('firebird_version')
+        .eq('user_id', this.userUUID)
         .order('firebird_version', { ascending: false })
         .limit(1);
 
@@ -131,6 +134,7 @@ class ThirdPartySyncService {
         .from('invoice_third_parties')
         .select('id')
         .eq('id_n', mappedData.id_n)
+        .eq('user_id', this.userUUID)
         .single();
 
       if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = no rows found
@@ -148,7 +152,8 @@ class ThirdPartySyncService {
             sync_status: 'SYNCED',
             sync_error: null
           })
-          .eq('id_n', mappedData.id_n);
+          .eq('id_n', mappedData.id_n)
+          .eq('user_id', this.userUUID);
 
         if (error) throw error;
         result = data;
@@ -159,6 +164,7 @@ class ThirdPartySyncService {
           .from('invoice_third_parties')
           .insert({
             ...mappedData,
+            user_id: this.userUUID,
             last_sync_at: new Date().toISOString(),
             sync_status: 'SYNCED',
             sync_error: null
@@ -289,6 +295,7 @@ class ThirdPartySyncService {
       const { data, error } = await this.supabaseClient.client
         .from('invoice_third_parties')
         .select('sync_status, count(*)')
+        .eq('user_id', this.userUUID)
         .group('sync_status');
 
       if (error) throw error;

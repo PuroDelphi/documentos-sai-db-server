@@ -1,11 +1,13 @@
 const { createClient } = require('@supabase/supabase-js');
 const config = require('../config');
 const logger = require('../utils/logger');
+const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class SupabaseClient {
   constructor() {
     this.client = createClient(config.supabase.url, config.supabase.anonKey);
-    logger.info('Cliente Supabase inicializado');
+    this.userUUID = validateAndGetUserUUID();
+    logger.info(`Cliente Supabase inicializado para usuario: ${this.userUUID}`);
   }
 
   /**
@@ -15,32 +17,35 @@ class SupabaseClient {
    */
   async getInvoiceData(invoiceId) {
     try {
-      // Obtener datos de la factura
+      // Obtener datos de la factura (filtrado por usuario)
       const { data: invoice, error: invoiceError } = await this.client
         .from('invoices')
         .select('*')
         .eq('id', invoiceId)
+        .eq('user_id', this.userUUID)
         .single();
 
       if (invoiceError) {
         throw new Error(`Error obteniendo factura: ${invoiceError.message}`);
       }
 
-      // Obtener items de la factura
+      // Obtener items de la factura (filtrado por usuario)
       const { data: items, error: itemsError } = await this.client
         .from('invoice_items')
         .select('*')
-        .eq('invoice_id', invoiceId);
+        .eq('invoice_id', invoiceId)
+        .eq('user_id', this.userUUID);
 
       if (itemsError) {
         throw new Error(`Error obteniendo items: ${itemsError.message}`);
       }
 
-      // Obtener entradas contables
+      // Obtener entradas contables (filtrado por usuario)
       const { data: entries, error: entriesError } = await this.client
         .from('accounting_entries')
         .select('*')
-        .eq('invoice_id', invoiceId);
+        .eq('invoice_id', invoiceId)
+        .eq('user_id', this.userUUID);
 
       if (entriesError) {
         throw new Error(`Error obteniendo entradas contables: ${entriesError.message}`);
@@ -70,7 +75,7 @@ class SupabaseClient {
           event: 'UPDATE',
           schema: 'public',
           table: 'invoices',
-          filter: 'estado=eq.APROBADO'
+          filter: `estado=eq.APROBADO,user_id=eq.${this.userUUID}`
         },
         async (payload) => {
           const invoice = payload.new;
@@ -112,6 +117,7 @@ class SupabaseClient {
         .from('invoices')
         .select('*')
         .eq('estado', 'APROBADO')
+        .eq('user_id', this.userUUID)
         .or('service_response.is.null,service_response.neq.Ok')
         .order('date', { ascending: true });
 
@@ -154,7 +160,8 @@ class SupabaseClient {
           service_response: serviceResponse
           // fecha_hora_sync se actualiza automáticamente por trigger cuando estado = 'SINCRONIZADO'
         })
-        .eq('id', invoiceId);
+        .eq('id', invoiceId)
+        .eq('user_id', this.userUUID);
 
       if (error) {
         throw new Error(`Error actualizando estado de factura: ${error.message}`);

@@ -1,11 +1,13 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
 const logger = require('../utils/logger');
+const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class ProductSyncService {
   constructor() {
     this.firebirdClient = new FirebirdClient();
     this.supabaseClient = new SupabaseClient();
+    this.userUUID = validateAndGetUserUUID();
     
     // Configuración de sincronización
     this.syncConfig = {
@@ -68,6 +70,7 @@ class ProductSyncService {
       const { data, error } = await this.supabaseClient.client
         .from('invoice_products')
         .select('firebird_version')
+        .eq('user_id', this.userUUID)
         .order('firebird_version', { ascending: false })
         .limit(1);
 
@@ -229,6 +232,7 @@ class ProductSyncService {
         .from('invoice_products')
         .select('id')
         .eq('item_code', mappedData.item_code)
+        .eq('user_id', this.userUUID)
         .single();
 
       if (selectError && selectError.code !== 'PGRST116') {
@@ -246,7 +250,8 @@ class ProductSyncService {
             sync_status: 'SYNCED',
             sync_error: null
           })
-          .eq('item_code', mappedData.item_code);
+          .eq('item_code', mappedData.item_code)
+          .eq('user_id', this.userUUID);
 
         if (error) throw error;
         result = data;
@@ -257,6 +262,7 @@ class ProductSyncService {
           .from('invoice_products')
           .insert({
             ...mappedData,
+            user_id: this.userUUID,
             last_sync_at: new Date().toISOString(),
             sync_status: 'SYNCED',
             sync_error: null
@@ -440,6 +446,7 @@ class ProductSyncService {
       const { data, error } = await this.supabaseClient.client
         .from('invoice_products')
         .select('sync_status, count(*)')
+        .eq('user_id', this.userUUID)
         .group('sync_status');
 
       if (error) throw error;

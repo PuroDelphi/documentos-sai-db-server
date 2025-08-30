@@ -162,6 +162,12 @@ npm run test-project-activity
 npm run test-document-type
 ```
 
+### Prueba de Filtro por Usuario
+```bash
+# Probar el filtro por UUID de usuario
+npm run test-user-filter
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -216,6 +222,56 @@ USE_INVOICE_NUMBER_FOR_INVC=true
 - Los valores se truncan automáticamente si exceden este límite
 - El cambio de configuración afecta solo a las nuevas facturas procesadas
 - Se recomienda mantener consistencia en la configuración
+
+## 👤 Configuración de Filtro por Usuario (OBLIGATORIO)
+
+El sistema requiere configurar un UUID de usuario para filtrar todos los datos y operaciones:
+
+### Configuración Obligatoria
+
+```env
+# UUID del usuario para filtrar todos los datos del sistema
+# Este campo es OBLIGATORIO y debe ser un UUID válido
+USER_UUID=550e8400-e29b-41d4-a716-446655440000
+```
+
+### Comportamiento del Sistema
+
+- **Validación al inicio**: El sistema valida que el UUID esté configurado y sea válido
+- **Filtro automático**: Todas las consultas se filtran automáticamente por `user_id`
+- **Inserción automática**: Todos los nuevos registros incluyen el `user_id` configurado
+- **Realtime filtrado**: Solo las facturas del usuario configurado activan el listener
+- **Aislamiento completo**: Cada usuario ve únicamente sus propios datos
+
+### Tablas Afectadas
+
+Todas las tablas principales incluyen el campo `user_id`:
+- `invoices` - Facturas
+- `invoice_items` - Items de facturas
+- `accounting_entries` - Entradas contables
+- `invoice_third_parties` - Terceros sincronizados
+- `invoice_chart_of_accounts` - Plan de cuentas sincronizado
+- `invoice_products` - Productos sincronizados
+
+### Seguridad
+
+- **Obligatorio**: El sistema no inicia sin un UUID válido configurado
+- **Validación**: Se valida el formato UUID v4
+- **Filtro automático**: Imposible acceder a datos de otros usuarios
+- **Logging**: Se registra el UUID configurado al iniciar
+
+### Configuración Inicial
+
+1. **Obtener UUID del usuario** desde tu sistema de autenticación
+2. **Configurar en .env**:
+   ```env
+   USER_UUID=tu-uuid-de-usuario-aqui
+   ```
+3. **Reiniciar el servicio** para aplicar la configuración
+4. **Verificar** con el script de prueba:
+   ```bash
+   npm run test-user-filter
+   ```
 
 ## 📄 Configuración de Tipo de Documento
 

@@ -1,11 +1,13 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
 const logger = require('../utils/logger');
+const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class ChartOfAccountsSyncService {
   constructor() {
     this.firebirdClient = new FirebirdClient();
     this.supabaseClient = new SupabaseClient();
+    this.userUUID = validateAndGetUserUUID();
     
     // Configuración de rangos de cuentas a sincronizar
     this.syncConfig = {
@@ -169,6 +171,7 @@ class ChartOfAccountsSyncService {
         .from('invoice_chart_of_accounts')
         .select('id')
         .eq('account_code', mappedData.account_code)
+        .eq('user_id', this.userUUID)
         .single();
 
       if (selectError && selectError.code !== 'PGRST116') {
@@ -186,7 +189,8 @@ class ChartOfAccountsSyncService {
             sync_status: 'SYNCED',
             sync_error: null
           })
-          .eq('account_code', mappedData.account_code);
+          .eq('account_code', mappedData.account_code)
+          .eq('user_id', this.userUUID);
 
         if (error) throw error;
         result = data;
@@ -197,6 +201,7 @@ class ChartOfAccountsSyncService {
           .from('invoice_chart_of_accounts')
           .insert({
             ...mappedData,
+            user_id: this.userUUID,
             last_sync_at: new Date().toISOString(),
             sync_status: 'SYNCED',
             sync_error: null
@@ -337,6 +342,7 @@ class ChartOfAccountsSyncService {
       const { data, error } = await this.supabaseClient.client
         .from('invoice_chart_of_accounts')
         .select('sync_status, count(*)')
+        .eq('user_id', this.userUUID)
         .group('sync_status');
 
       if (error) throw error;
