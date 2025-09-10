@@ -168,6 +168,12 @@ npm run test-document-type
 npm run test-user-filter
 ```
 
+### Prueba de Exclusión de Cuentas
+```bash
+# Probar la exclusión de rangos de cuentas
+npm run test-account-exclusion
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -336,6 +342,62 @@ Los campos `PROYECTO` y `ACTIVIDAD` en la tabla `CARPRODE` pueden configurarse c
 # Códigos predeterminados para todos los registros CARPRODE
 DEFAULT_PROJECT_CODE=PROJ001        # Máximo 10 caracteres
 DEFAULT_ACTIVITY_CODE=ACT           # Máximo 3 caracteres
+```
+
+## 🚫 Configuración de Exclusión de Cuentas
+
+Además de los rangos de inclusión (`ACCOUNT_SYNC_RANGES`), puedes configurar rangos de cuentas que deseas **excluir** de la sincronización:
+
+### Configuración de Exclusión
+
+```env
+# Rangos de cuentas a EXCLUIR de la sincronización
+# Formato: cuenta1-cuenta2,cuenta3-cuenta4 o cuenta_individual-cuenta_individual
+ACCOUNT_EXCLUDE_RANGES=
+```
+
+### Ejemplos de Uso
+
+```env
+# Excluir cuentas específicas individuales
+ACCOUNT_EXCLUDE_RANGES=53159502-53159502,53959501-53959501
+
+# Excluir rangos completos
+ACCOUNT_EXCLUDE_RANGES=60000000-69999999,80000000-89999999
+
+# Mezcla de cuentas individuales y rangos
+ACCOUNT_EXCLUDE_RANGES=12345678-12345678,50000000-59999999,70000000-79999999
+
+# No excluir nada (por defecto)
+ACCOUNT_EXCLUDE_RANGES=
+```
+
+### Funcionamiento
+
+1. **Primero se aplican los rangos de inclusión** (`ACCOUNT_SYNC_RANGES`)
+2. **Después se excluyen las cuentas** especificadas en `ACCOUNT_EXCLUDE_RANGES`
+3. **El resultado final** son las cuentas que están en los rangos de inclusión PERO NO en los rangos de exclusión
+
+### Ejemplo Práctico
+
+```env
+# Incluir cuentas del 11000000 al 11999999
+ACCOUNT_SYNC_RANGES=11000000-11999999
+
+# Pero excluir algunas cuentas específicas de ese rango
+ACCOUNT_EXCLUDE_RANGES=11050000-11059999,11500000-11500000
+```
+
+**Resultado**: Se sincronizarán todas las cuentas del 11000000 al 11999999, EXCEPTO las del 11050000 al 11059999 y la cuenta 11500000.
+
+### Validación
+
+```bash
+# Probar la configuración de exclusión
+npm run test-account-exclusion
+
+# Ver análisis completo de rangos
+npm run test-account-ranges
 ```
 
 ### Comportamiento

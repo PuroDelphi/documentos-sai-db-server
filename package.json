@@ -14,6 +14,7 @@
     "sync-accounts-stats": "node src/scripts/syncChartOfAccounts.js stats",
     "sync-accounts-config": "node src/scripts/syncChartOfAccounts.js config",
     "test-account-ranges": "node src/scripts/testAccountRanges.js",
+    "test-account-exclusion": "node src/scripts/testAccountExclusion.js",
     "sync-products": "node src/scripts/syncProducts.js",
     "sync-products-full": "node src/scripts/syncProducts.js full",
     "sync-products-stats": "node src/scripts/syncProducts.js stats",

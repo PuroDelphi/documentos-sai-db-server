@@ -13,6 +13,7 @@ class ChartOfAccountsSyncService {
     this.syncConfig = {
       // Rangos configurables por variables de entorno
       accountRanges: this.parseAccountRanges(process.env.ACCOUNT_SYNC_RANGES || '1-99999999'),
+      accountExcludeRanges: this.parseAccountRanges(process.env.ACCOUNT_EXCLUDE_RANGES || ''),
       onlyActiveAccounts: process.env.SYNC_ONLY_ACTIVE_ACCOUNTS !== 'false', // true por defecto
       excludeZeroLevel: process.env.EXCLUDE_ZERO_LEVEL_ACCOUNTS !== 'false', // true por defecto
     };
@@ -25,16 +26,21 @@ class ChartOfAccountsSyncService {
    */
   parseAccountRanges(rangesStr) {
     try {
+      // Si la cadena está vacía, retornar array vacío
+      if (!rangesStr || rangesStr.trim() === '') {
+        return [];
+      }
+
       const ranges = rangesStr.split(',').map(range => {
         const [start, end] = range.trim().split('-').map(num => parseInt(num));
-        return { start: start || 1, end: end || 99999999 };
+        return { start: start || 1, end: end || start || 99999999 };
       });
 
       logger.info('Rangos de cuentas parseados:', ranges);
       return ranges;
     } catch (error) {
-      logger.warn('Error parseando rangos de cuentas, usando rango completo:', error);
-      return [{ start: 1, end: 99999999 }];
+      logger.warn('Error parseando rangos de cuentas:', error);
+      return [];
     }
   }
 
@@ -134,11 +140,21 @@ class ChartOfAccountsSyncService {
   buildWhereConditions() {
     const conditions = [];
 
-    // Filtro por rangos de cuentas
-    const rangeConditions = this.syncConfig.accountRanges.map(range =>
-      `(ACCT >= ${range.start} AND ACCT <= ${range.end})`
-    );
-    conditions.push(`(${rangeConditions.join(' OR ')})`);
+    // Filtro por rangos de cuentas a incluir
+    if (this.syncConfig.accountRanges.length > 0) {
+      const rangeConditions = this.syncConfig.accountRanges.map(range =>
+        `(ACCT >= ${range.start} AND ACCT <= ${range.end})`
+      );
+      conditions.push(`(${rangeConditions.join(' OR ')})`);
+    }
+
+    // Filtro por rangos de cuentas a excluir
+    if (this.syncConfig.accountExcludeRanges.length > 0) {
+      const excludeConditions = this.syncConfig.accountExcludeRanges.map(range =>
+        `NOT (ACCT >= ${range.start} AND ACCT <= ${range.end})`
+      );
+      conditions.push(`(${excludeConditions.join(' AND ')})`);
+    }
 
     // Filtro por cuentas activas
     if (this.syncConfig.onlyActiveAccounts) {
@@ -150,7 +166,7 @@ class ChartOfAccountsSyncService {
       conditions.push('(NVEL IS NULL OR NVEL >= 0)'); // Cambiado de > 0 a >= 0
     }
 
-    const whereClause = conditions.join(' AND ');
+    const whereClause = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
     logger.info('Condiciones WHERE construidas:', whereClause);
 
     return whereClause;
@@ -372,6 +388,7 @@ class ChartOfAccountsSyncService {
   getConfig() {
     return {
       accountRanges: this.syncConfig.accountRanges,
+      accountExcludeRanges: this.syncConfig.accountExcludeRanges,
       onlyActiveAccounts: this.syncConfig.onlyActiveAccounts,
       excludeZeroLevel: this.syncConfig.excludeZeroLevel
     };

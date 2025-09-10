@@ -22,36 +22,74 @@ async function testAccountRanges() {
     // Mostrar configuración actual
     const config = syncService.getConfig();
     logger.info('Configuración actual:', config);
-    
-    // Probar cada rango individualmente
-    for (const range of config.accountRanges) {
-      logger.info(`\n--- Probando rango: ${range.start} - ${range.end} ---`);
-      
-      const query = `
-        SELECT COUNT(*) as total
-        FROM ACCT 
-        WHERE ACCT >= ${range.start} AND ACCT <= ${range.end} AND ACTIVO = 'S'
-      `;
-      
-      const result = await firebirdClient.query(query);
-      logger.info(`Cuentas encontradas en rango: ${result[0].TOTAL}`);
-      
-      if (result[0].TOTAL > 0) {
-        // Mostrar algunas cuentas de muestra
-        const sampleQuery = `
-          SELECT FIRST 5 ACCT, DESCRIPCION, NVEL, ACTIVO
-          FROM ACCT 
+
+    // Probar cada rango de inclusión individualmente
+    if (config.accountRanges.length > 0) {
+      logger.info('\n=== RANGOS DE INCLUSIÓN ===');
+      for (const range of config.accountRanges) {
+        logger.info(`\n--- Probando rango de inclusión: ${range.start} - ${range.end} ---`);
+
+        const query = `
+          SELECT COUNT(*) as total
+          FROM ACCT
           WHERE ACCT >= ${range.start} AND ACCT <= ${range.end} AND ACTIVO = 'S'
-          ORDER BY ACCT
         `;
-        
-        const samples = await firebirdClient.query(sampleQuery);
-        logger.info('Muestra de cuentas:', samples.map(acc => ({
-          ACCT: acc.ACCT,
-          DESCRIPCION: acc.DESCRIPCION?.trim(),
-          NVEL: acc.NVEL,
-          ACTIVO: acc.ACTIVO
-        })));
+
+        const result = await firebirdClient.query(query);
+        logger.info(`Cuentas encontradas en rango: ${result[0].TOTAL}`);
+
+        if (result[0].TOTAL > 0) {
+          // Mostrar algunas cuentas de muestra
+          const sampleQuery = `
+            SELECT FIRST 5 ACCT, DESCRIPCION, NVEL, ACTIVO
+            FROM ACCT
+            WHERE ACCT >= ${range.start} AND ACCT <= ${range.end} AND ACTIVO = 'S'
+            ORDER BY ACCT
+          `;
+
+          const samples = await firebirdClient.query(sampleQuery);
+          logger.info('Muestra de cuentas:', samples.map(acc => ({
+            ACCT: acc.ACCT,
+            DESCRIPCION: acc.DESCRIPCION?.trim(),
+            NVEL: acc.NVEL,
+            ACTIVO: acc.ACTIVO
+          })));
+        }
+      }
+    }
+
+    // Probar cada rango de exclusión individualmente
+    if (config.accountExcludeRanges.length > 0) {
+      logger.info('\n=== RANGOS DE EXCLUSIÓN ===');
+      for (const range of config.accountExcludeRanges) {
+        logger.info(`\n--- Probando rango de exclusión: ${range.start} - ${range.end} ---`);
+
+        const query = `
+          SELECT COUNT(*) as total
+          FROM ACCT
+          WHERE ACCT >= ${range.start} AND ACCT <= ${range.end} AND ACTIVO = 'S'
+        `;
+
+        const result = await firebirdClient.query(query);
+        logger.info(`Cuentas que serán EXCLUIDAS en este rango: ${result[0].TOTAL}`);
+
+        if (result[0].TOTAL > 0) {
+          // Mostrar algunas cuentas que serán excluidas
+          const sampleQuery = `
+            SELECT FIRST 5 ACCT, DESCRIPCION, NVEL, ACTIVO
+            FROM ACCT
+            WHERE ACCT >= ${range.start} AND ACCT <= ${range.end} AND ACTIVO = 'S'
+            ORDER BY ACCT
+          `;
+
+          const samples = await firebirdClient.query(sampleQuery);
+          logger.info('Muestra de cuentas que serán EXCLUIDAS:', samples.map(acc => ({
+            ACCT: acc.ACCT,
+            DESCRIPCION: acc.DESCRIPCION?.trim(),
+            NVEL: acc.NVEL,
+            ACTIVO: acc.ACTIVO
+          })));
+        }
       }
     }
     
