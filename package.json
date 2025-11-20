@@ -25,6 +25,7 @@
     "test-project-activity": "node src/scripts/testProjectActivity.js",
     "test-document-type": "node src/scripts/testDocumentType.js",
     "test-user-filter": "node src/scripts/testUserFilter.js",
+    "diagnostic": "node src/scripts/diagnosticIssues.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

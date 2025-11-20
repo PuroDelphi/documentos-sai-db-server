@@ -174,6 +174,12 @@ npm run test-user-filter
 npm run test-account-exclusion
 ```
 
+### Diagnóstico de Problemas
+```bash
+# Diagnosticar problemas de duplicados y facturas pendientes
+npm run diagnostic
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -429,6 +435,106 @@ DEFAULT_ACTIVITY_CODE=ACT
 DEFAULT_PROJECT_CODE=PROYECTO_MUY_LARGO
 DEFAULT_ACTIVITY_CODE=ACTIVIDAD_LARGA
 # Resultado: PROYECTO="PROYECTO_M", ACTIVIDAD="ACT"
+```
+
+## 🔧 Troubleshooting
+
+### Problema 1: Errores de Clave Duplicada
+
+Si ves errores como estos:
+```
+Error: duplicate key value violates unique constraint "invoice_third_parties_id_n_key"
+Error: duplicate key value violates unique constraint "invoice_products_item_code_key"
+```
+
+**Causa**: Las restricciones UNIQUE en Supabase no incluyen el `user_id`, causando conflictos entre usuarios.
+
+**Solución**:
+1. Ejecuta el script de diagnóstico:
+   ```bash
+   npm run diagnostic
+   ```
+
+2. Ejecuta el SQL de corrección en Supabase SQL Editor:
+   - Abre el archivo `database/fix_unique_constraints.sql`
+   - Copia todo el contenido
+   - Pégalo en Supabase SQL Editor y ejecútalo
+
+3. Reinicia el servicio
+
+**Qué hace el script SQL**:
+- Elimina restricciones UNIQUE simples (`id_n`, `item_code`, `account_code`)
+- Crea restricciones UNIQUE compuestas (`id_n + user_id`, etc.)
+- Permite que múltiples usuarios tengan los mismos códigos
+
+### Problema 2: Facturas Aprobadas No Se Sincronizaron
+
+Si había facturas en estado `APROBADO` antes de iniciar el servicio y no se sincronizaron:
+
+**Causa**: El sistema tiene recuperación automática pero puede estar deshabilitada o fallar.
+
+**Diagnóstico**:
+```bash
+npm run diagnostic
+```
+
+**Soluciones**:
+
+1. **Verificar configuración**:
+   ```env
+   ENABLE_INVOICE_RECOVERY=true
+   RECOVERY_BATCH_SIZE=10
+   ```
+
+2. **Reiniciar el servicio**: Al iniciar, el sistema busca y procesa facturas pendientes automáticamente
+
+3. **Verificar logs**: Busca mensajes como:
+   ```
+   Verificando facturas aprobadas pendientes de sincronización...
+   Encontradas X facturas aprobadas pendientes
+   ```
+
+4. **Procesar manualmente**: Si la recuperación automática falla, usa:
+   ```bash
+   npm run test-recovery
+   ```
+
+**Cómo funciona la recuperación**:
+- Al iniciar, el sistema busca facturas con `estado=APROBADO` y `service_response != 'Ok'`
+- Las procesa en lotes (tamaño configurable)
+- Actualiza el estado a `SINCRONIZADO` o `ERROR` según el resultado
+
+### Problema 3: Filtro por Usuario No Funciona
+
+**Síntomas**:
+- Ves datos de otros usuarios
+- Errores de permisos
+
+**Solución**:
+1. Verifica que `USER_UUID` esté configurado en `.env`
+2. Ejecuta el test de filtro:
+   ```bash
+   npm run test-user-filter
+   ```
+3. Verifica que todas las tablas tengan el campo `user_id`
+4. Reinicia el servicio
+
+### Comandos Útiles de Diagnóstico
+
+```bash
+# Diagnóstico completo
+npm run diagnostic
+
+# Verificar filtro de usuario
+npm run test-user-filter
+
+# Probar recuperación de facturas
+npm run test-recovery
+
+# Ver estadísticas de sincronización
+npm run sync-third-parties-stats
+npm run sync-accounts-stats
+npm run sync-products-stats
 ```
 
 ## 🔄 Flujo de Procesamiento
