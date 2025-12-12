@@ -180,6 +180,18 @@ npm run test-account-exclusion
 npm run diagnostic
 ```
 
+### Sincronización con Pinecone (Búsqueda Vectorial)
+```bash
+# Probar configuración de Pinecone y embeddings
+npm run test-pinecone
+
+# Sincronizar todos los productos a Pinecone
+npm run sync-products-to-pinecone
+
+# Buscar productos por similitud semántica
+npm run search-products -- tornillo acero inoxidable
+```
+
 ## 📊 Mapeo de Datos
 
 ### CARPROEN ← invoices
@@ -436,6 +448,148 @@ DEFAULT_PROJECT_CODE=PROYECTO_MUY_LARGO
 DEFAULT_ACTIVITY_CODE=ACTIVIDAD_LARGA
 # Resultado: PROYECTO="PROYECTO_M", ACTIVIDAD="ACT"
 ```
+
+## 🔍 Búsqueda Vectorial con Pinecone
+
+### Descripción
+
+El sistema incluye integración con **Pinecone** para búsqueda semántica de productos usando embeddings vectoriales. Esto permite:
+
+- 🔎 **Búsqueda por similitud**: Encuentra productos similares aunque no coincidan exactamente las palabras
+- 🤖 **Embeddings con IA**: Usa el servicio de embeddings de chatbotstools.asistentesautonomos.com
+- 📊 **Sincronización automática**: Los productos se sincronizan automáticamente a Pinecone
+- 🎯 **Búsqueda inteligente**: "tornillo acero" encuentra "tornillos de acero inoxidable"
+
+### Configuración
+
+#### 1. Crear cuenta en Pinecone
+
+1. Regístrate en [https://app.pinecone.io/](https://app.pinecone.io/)
+2. Crea un nuevo índice con estas configuraciones:
+   - **Dimensión**: 512 (para embeddings CLIP)
+   - **Métrica**: cosine
+   - **Nombre**: elige un nombre descriptivo (ej: `saidb-products`)
+
+#### 2. Obtener API Key de Pinecone
+
+1. En Pinecone Dashboard → API Keys
+2. Copia tu API Key
+3. Anota el Environment (ej: `us-east-1-aws`)
+
+#### 3. Obtener API Key del servicio de embeddings
+
+1. Regístrate en [https://chatbotstools.asistentesautonomos.com/](https://chatbotstools.asistentesautonomos.com/)
+2. Crea una API Key en tu dashboard
+3. Suscríbete al servicio de "CLIP Embeddings"
+
+#### 4. Configurar variables de entorno
+
+```env
+# Pinecone
+PINECONE_API_KEY=tu-api-key-de-pinecone
+PINECONE_INDEX_NAME=saidb-products
+PINECONE_ENVIRONMENT=us-east-1-aws
+PINECONE_NAMESPACE=  # Opcional, usa USER_UUID por defecto
+
+# Servicio de Embeddings
+EMBEDDINGS_API_KEY=tu-api-key-de-embeddings
+EMBEDDINGS_API_URL=https://chatbotstools.asistentesautonomos.com/api/embeddings
+EMBEDDINGS_DIMENSION=512
+
+# Sincronización
+ENABLE_PINECONE_SYNC=true
+PINECONE_SYNC_INTERVAL=60  # minutos
+PINECONE_BATCH_SIZE=50
+```
+
+### Uso
+
+#### Probar configuración
+
+```bash
+npm run test-pinecone
+```
+
+Este comando:
+- ✅ Verifica que todas las variables estén configuradas
+- ✅ Prueba la conexión con el servicio de embeddings
+- ✅ Prueba la conexión con Pinecone
+- ✅ Inserta un vector de prueba
+- ✅ Realiza una búsqueda de prueba
+- ✅ Limpia el vector de prueba
+
+#### Sincronizar productos
+
+```bash
+npm run sync-products-to-pinecone
+```
+
+Este comando:
+- Obtiene todos los productos del usuario desde Supabase
+- Genera embeddings para cada producto (código + descripción)
+- Los almacena en Pinecone con metadata completa
+- Procesa en lotes para optimizar rendimiento
+
+#### Buscar productos
+
+```bash
+npm run search-products -- <texto de búsqueda>
+```
+
+Ejemplos:
+```bash
+# Buscar tornillos
+npm run search-products -- tornillo acero inoxidable
+
+# Buscar cables
+npm run search-products -- cable electrico calibre 12
+
+# Buscar por código
+npm run search-products -- 12345
+```
+
+### Cómo funciona
+
+1. **Generación de embeddings**:
+   - Se combina el código y descripción del producto
+   - Se envía al servicio de embeddings
+   - Se obtiene un vector de 512 dimensiones
+
+2. **Almacenamiento en Pinecone**:
+   - Cada producto se almacena con ID único: `product_{item_code}`
+   - Se incluye metadata: código, descripción, user_id, fecha
+   - Se usa namespace por usuario para aislamiento
+
+3. **Búsqueda**:
+   - Se genera embedding para el texto de búsqueda
+   - Se buscan los vectores más similares en Pinecone
+   - Se retornan los productos ordenados por similitud
+
+### Metadata almacenada
+
+Cada vector en Pinecone incluye:
+
+```json
+{
+  "item_code": "12345",
+  "description": "Tornillo acero inoxidable 1/4",
+  "supabase_id": "uuid-del-registro",
+  "user_id": "uuid-del-usuario",
+  "synced_at": "2025-12-12T10:30:00Z"
+}
+```
+
+### Sincronización automática
+
+Si `ENABLE_PINECONE_SYNC=true`, el sistema:
+- Sincroniza productos nuevos automáticamente
+- Actualiza productos modificados
+- Ejecuta sincronización cada `PINECONE_SYNC_INTERVAL` minutos
+
+### Costos
+
+- **Pinecone**: Plan gratuito incluye 1 índice y 100K vectores
+- **Embeddings**: $10/mes por servicio en chatbotstools.asistentesautonomos.com
 
 ## 🔧 Troubleshooting
 
