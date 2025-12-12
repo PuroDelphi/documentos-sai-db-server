@@ -145,17 +145,19 @@ class EmbeddingsService {
 
   /**
    * Genera un texto descriptivo para un producto
-   * Combina código y descripción para mejor búsqueda
+   * Combina código y descripción para búsqueda semántica
    * @param {Object} product - Objeto producto con item_code y description
    * @returns {String} Texto descriptivo
    */
   generateProductText(product) {
     const parts = [];
 
+    // Código del producto
     if (product.item_code) {
       parts.push(`Código: ${product.item_code}`);
     }
 
+    // Descripción
     if (product.description) {
       parts.push(product.description.trim());
     }

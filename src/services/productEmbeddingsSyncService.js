@@ -33,10 +33,10 @@ class ProductEmbeddingsSyncService {
       // Conectar a Pinecone
       await this.pineconeClient.connect();
 
-      // Obtener todos los productos del usuario desde Supabase
+      // Obtener productos del usuario desde Supabase (solo código y descripción)
       const { data: products, error } = await this.supabaseClient.client
         .from('invoice_products')
-        .select('item_code, description, id')
+        .select('item_code, description')
         .eq('user_id', this.userUUID)
         .order('item_code');
 
@@ -106,12 +106,11 @@ class ProductEmbeddingsSyncService {
 
       // Preparar vectores para Pinecone
       const vectors = products.map((product, index) => ({
-        id: `product_${product.item_code}`,
+        id: `product_${this.userUUID}_${product.item_code}`,
         values: embeddings[index],
         metadata: {
           item_code: product.item_code,
           description: product.description || '',
-          supabase_id: product.id,
           user_id: this.userUUID,
           synced_at: new Date().toISOString(),
         },
@@ -148,12 +147,11 @@ class ProductEmbeddingsSyncService {
 
       // Preparar vector
       const vector = {
-        id: `product_${product.item_code}`,
+        id: `product_${this.userUUID}_${product.item_code}`,
         values: embedding,
         metadata: {
           item_code: product.item_code,
           description: product.description || '',
-          supabase_id: product.id,
           user_id: this.userUUID,
           synced_at: new Date().toISOString(),
         },

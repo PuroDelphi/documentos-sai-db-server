@@ -55,13 +55,14 @@ async function testPineconeSync() {
     // 4. Probar inserción de vector de prueba
     logger.info('\n4. PROBANDO INSERCIÓN DE VECTOR:');
     try {
+      const userUUID = process.env.USER_UUID;
       const testVector = {
-        id: 'test_product_12345',
-        values: await embeddingsService.generateEmbedding('Producto de prueba'),
+        id: `product_${userUUID}_12345`,
+        values: await embeddingsService.generateEmbedding('Código: 12345 - Producto de prueba'),
         metadata: {
           item_code: '12345',
           description: 'Producto de prueba',
-          user_id: process.env.USER_UUID,
+          user_id: userUUID,
           test: true,
           synced_at: new Date().toISOString(),
         },
@@ -97,7 +98,8 @@ async function testPineconeSync() {
     // 6. Limpiar vector de prueba
     logger.info('\n6. LIMPIANDO VECTOR DE PRUEBA:');
     try {
-      await pineconeClient.delete(['test_product_12345']);
+      const userUUID = process.env.USER_UUID;
+      await pineconeClient.delete([`product_${userUUID}_12345`]);
       logger.info('   ✅ Vector de prueba eliminado');
     } catch (error) {
       logger.error(`   ❌ Error eliminando vector: ${error.message}`);
