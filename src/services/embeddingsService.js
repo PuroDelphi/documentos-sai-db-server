@@ -38,7 +38,7 @@ class EmbeddingsService {
       const response = await axios.post(
         this.apiUrl,
         {
-          text: text.trim(),
+          input: text.trim(),  // El servicio espera 'input' o 'prompt'
         },
         {
           headers: {
@@ -50,11 +50,32 @@ class EmbeddingsService {
       );
 
       // Validar respuesta
-      if (!response.data || !response.data.embedding) {
+      // El servicio puede retornar diferentes formatos
+      logger.debug(`Respuesta del servicio: ${JSON.stringify(response.data).substring(0, 200)}...`);
+
+      let embedding;
+
+      if (response.data.embeddings && Array.isArray(response.data.embeddings)) {
+        // Formato Llama/Ollama: { embeddings: [[...]] }
+        embedding = response.data.embeddings[0];
+      } else if (response.data.embedding) {
+        // Formato: { embedding: [...] }
+        embedding = response.data.embedding;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        // Formato OpenAI: { data: [{ embedding: [...] }] }
+        embedding = response.data.data[0]?.embedding;
+      } else if (Array.isArray(response.data)) {
+        // Formato directo: [...]
+        embedding = response.data;
+      } else {
+        logger.error(`Formato de respuesta no reconocido: ${JSON.stringify(response.data)}`);
         throw new Error('Respuesta inválida del servicio de embeddings');
       }
 
-      const embedding = response.data.embedding;
+      if (!embedding || !Array.isArray(embedding)) {
+        logger.error(`Embedding no es un array válido: ${typeof embedding}`);
+        throw new Error('El embedding retornado no es un array válido');
+      }
 
       // Validar dimensión
       if (embedding.length !== this.dimension) {

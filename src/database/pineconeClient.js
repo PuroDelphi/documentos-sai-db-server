@@ -85,9 +85,11 @@ class PineconeClient {
 
       const result = await this.index.namespace(this.namespace).upsert(vectors);
 
-      logger.info(`✅ ${result.upsertedCount || vectors.length} vectores insertados en Pinecone`);
-      
-      return result;
+      // La respuesta puede ser undefined o un objeto con upsertedCount
+      const count = result?.upsertedCount || vectors.length;
+      logger.info(`✅ ${count} vectores insertados en Pinecone`);
+
+      return { upsertedCount: count };
     } catch (error) {
       logger.error('Error insertando vectores en Pinecone:', error);
       throw error;
