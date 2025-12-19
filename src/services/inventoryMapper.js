@@ -358,7 +358,7 @@ class InventoryMapper {
       SDOCR: defaults.SDOCR,
       FECHA_VENCIMIENTO: defaults.FECHA_VENCIMIENTO,
       COLOR: defaults.COLOR,
-      IVA: ivaAmount,
+      IVA: 0, // IVA se calcula en otro proceso
       COSTO_AJUSTE: defaults.COSTO_AJUSTE,
       NUMERO_AUTO: defaults.NUMERO_AUTO,
       CADENA_ADICIONAL: defaults.CADENA_ADICIONAL,
@@ -374,9 +374,9 @@ class InventoryMapper {
       COD_TALLA: defaults.COD_TALLA,
       COD_COLOR: defaults.COD_COLOR,
       FACTOR: defaults.FACTOR,
-      PRECIO_UNITARIO_IVA: priceWithIva,
-      VALIVA: ivaRate,
-      VALOR_IVA: ivaAmount / quantity, // IVA por unidad
+      PRECIO_UNITARIO_IVA: unitPrice, // Precio sin IVA por ahora
+      VALIVA: 0, // Tasa de IVA (se calcula en otro proceso)
+      VALOR_IVA: 0, // IVA por unidad (se calcula en otro proceso)
       CUBX: defaults.CUBX,
       CUBY: defaults.CUBY,
       CUBZ: defaults.CUBZ,
@@ -396,7 +396,7 @@ class InventoryMapper {
       VLRFOB: 0,
       VLRFLETE: 0,
       VLRSEGURO: 0,
-      PRECIOIVA: priceWithIva,
+      PRECIOIVA: unitPrice, // Precio sin IVA por ahora
       TAR_IMPTO_IBUA: 0,
       TAR_IMPTO_INPP: 0,
       TAR_IMPTO_ICUI: 0,
