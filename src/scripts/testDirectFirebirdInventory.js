@@ -3,6 +3,7 @@
  * NO usa Supabase, solo prueba la inserción directa en Firebird
  */
 
+require('dotenv').config();
 const FirebirdClient = require('../database/firebirdClient');
 const InventoryMapper = require('../services/inventoryMapper');
 const ThirdPartyCreationService = require('../services/thirdPartyCreationService');
@@ -229,7 +230,8 @@ async function testDirectFirebirdInventory() {
     logger.info(`✓ Consecutivo actualizado a ${consecutiveNumber + 1}`);
 
     // 11. Ejecutar procedimiento CONTABILIZAR_EA (opcional)
-    const contabilizarEA = process.env.CONTABILIZAR_EA === 'true';
+    // Puede habilitarse con CONTABILIZAR_EA=true en .env o con argumento --contabilizar
+    const contabilizarEA = process.env.CONTABILIZAR_EA === 'true' || process.argv.includes('--contabilizar');
     if (contabilizarEA) {
       logger.info('\n11. Ejecutando procedimiento CONTABILIZAR_EA...');
 
@@ -241,12 +243,22 @@ async function testDirectFirebirdInventory() {
       `);
 
       if (procedureExists[0]?.PROCEDURE_COUNT > 0) {
-        const documento = 'EA'; // TIPO en TIPDOC
-        await firebirdClient.query(
-          'EXECUTE PROCEDURE CONTABILIZAR_EA(?, ?, ?, ?, ?)',
-          [consecutiveNumber, documentClass, 1, 1, documento]
-        );
-        logger.info(`✓ Procedimiento CONTABILIZAR_EA ejecutado exitosamente`);
+        try {
+          const documento = 'EA'; // TIPO en TIPDOC
+          await firebirdClient.query(
+            'EXECUTE PROCEDURE CONTABILIZAR_EA(?, ?, ?, ?, ?)',
+            [consecutiveNumber, documentClass, 1, 1, documento]
+          );
+          logger.info(`✓ Procedimiento CONTABILIZAR_EA ejecutado exitosamente`);
+        } catch (contabError) {
+          // Error esperado si la EA no tiene cuentas contables configuradas
+          if (contabError.message.includes('GL') || contabError.message.includes('ACCT')) {
+            logger.warn(`⚠️ Procedimiento CONTABILIZAR_EA falló: La EA no tiene cuentas contables configuradas`);
+            logger.warn(`   Esto es normal en datos de prueba. En producción, asegúrese de configurar las cuentas.`);
+          } else {
+            throw contabError; // Re-lanzar si es otro tipo de error
+          }
+        }
       } else {
         logger.warn('⚠️ Procedimiento CONTABILIZAR_EA no existe en la base de datos');
       }

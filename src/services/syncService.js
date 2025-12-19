@@ -356,6 +356,15 @@ class SyncService {
 
       logger.info(`Procedimiento CONTABILIZAR_EA ejecutado exitosamente para EA ${number}`);
     } catch (error) {
+      // Manejar error de cuentas contables no configuradas
+      if (error.message && (error.message.includes('GL') || error.message.includes('ACCT'))) {
+        logger.warn(`Procedimiento CONTABILIZAR_EA falló para EA ${number}: Cuentas contables no configuradas`);
+        logger.warn('La EA fue creada correctamente pero no se pudo contabilizar. Configure las cuentas contables en el sistema.');
+        // No lanzar error, la EA se creó correctamente
+        return;
+      }
+
+      // Para otros errores, registrar y lanzar
       logger.error('Error ejecutando procedimiento CONTABILIZAR_EA:', error);
       logger.error('Detalles del error:', {
         message: error.message,
