@@ -17,6 +17,26 @@ Resolver el problema de que las facturas de proveedores (PDF/XML) tienen descrip
 - **Proveedor:** `"tornillo hexagonal 1/2x2 acero inox"`
 - **Sistema:** Detecta similitud del 85% y auto-empareja ✅
 
+## 🧠 Sistema de Aprendizaje
+
+El sistema **aprende de las correcciones del usuario** y las recuerda para futuras facturas:
+
+**Primera vez:**
+1. Usuario recibe factura con descripción: `"tornillo hexagonal 1/2x2 acero inox"`
+2. Sistema busca por similitud → Encuentra producto `"TORNILLO HEXAGONAL 1/2 X 2 ACERO INOXIDABLE"`
+3. Usuario **corrige** manualmente y asigna otro producto: `"TORNILLO ESPECIAL 1/2X2"`
+
+**Segunda vez (misma descripción):**
+1. Usuario recibe otra factura con: `"tornillo hexagonal 1/2x2 acero inox"`
+2. Sistema **recuerda** la corrección anterior
+3. Asigna automáticamente: `"TORNILLO ESPECIAL 1/2X2"` ✅ (sin buscar por similitud)
+
+**Ventajas:**
+- ✅ Aprende de las decisiones del usuario
+- ✅ Mejora con el tiempo
+- ✅ Respeta las correcciones manuales
+- ✅ Cada usuario tiene su propia "memoria"
+
 ---
 
 ## 🏗️ Arquitectura
@@ -29,39 +49,44 @@ Resolver el problema de que las facturas de proveedores (PDF/XML) tienen descrip
 4. **Función `auto_match_product_id()`** - Trigger function que auto-empareja
 5. **Triggers** - Ejecutan auto-emparejamiento en INSERT/UPDATE
 
-### Flujo de Datos
+### Flujo de Datos (con Aprendizaje)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 1. Usuario inserta invoice_item (desde PDF/XML)            │
+│ 1. Usuario inserta/actualiza invoice_item (desde PDF/XML)  │
 │    - description: "tornillo hexagonal 1/2x2 acero inox"    │
 │    - product_id: NULL                                       │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 2. TRIGGER: trigger_auto_match_product_id_on_insert         │
-│    - Se ejecuta BEFORE INSERT                               │
-│    - Llama a auto_match_product_id()                        │
+│ 2. TRIGGER: auto_match_product_id()                         │
+│    - Verifica que invoice_type = 'inventario'               │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 3. Verificar condiciones:                                   │
-│    ✓ product_id es NULL                                     │
-│    ✓ Factura es tipo EA u OC (inventario)                   │
+│ 3. PASO 1: APRENDIZAJE (Búsqueda Exacta)                   │
+│    - Busca en invoice_items del mismo user_id               │
+│    - Con la MISMA descripción (exacta)                      │
+│    - Que ya tengan product_id asignado                      │
+│    - Ordena por más reciente (id DESC)                      │
 └─────────────────────────────────────────────────────────────┘
                             ↓
+                    ¿Encontró match?
+                    ↙           ↘
+                  SÍ             NO
+                   ↓              ↓
+    ┌──────────────────┐   ┌─────────────────────────────────┐
+    │ USA producto     │   │ 4. PASO 2: SIMILITUD            │
+    │ aprendido        │   │    - find_similar_product()     │
+    │ (corrección      │   │    - Búsqueda por trigram       │
+    │  del usuario)    │   │    - Threshold: 0.3 (30%)       │
+    └──────────────────┘   └─────────────────────────────────┘
+                   ↓              ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 4. Buscar producto similar:                                 │
-│    - Llama a find_similar_product()                         │
-│    - Usa similarity() con threshold 0.3 (30%)               │
-│    - Busca en invoice_products del mismo user_id            │
-│    - Solo productos SINCRONIZADO                            │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 5. Resultado:                                               │
-│    ✅ Match encontrado → Asigna product_id automáticamente  │
-│    ❌ No match → product_id queda NULL                      │
+│ 5. Resultado                                                │
+│    - Si encontró: Asigna product_id automáticamente         │
+│    - Si no encontró: product_id queda NULL                  │
+│    - Log: LEARNED o SIMILARITY según el método usado        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -103,6 +128,24 @@ El auto-emparejamiento **SOLO** se aplica a facturas de tipo inventario:
 ---
 
 ## 🧪 Pruebas
+
+### 🧠 Prueba del Sistema de Aprendizaje (RECOMENDADA)
+
+```bash
+npm run test-learning
+```
+
+Esta prueba valida que el sistema **aprende de las correcciones del usuario**:
+
+1. Crea primera factura con descripción de prueba
+2. Sistema asigna product_id por similitud (o NULL)
+3. **Usuario corrige manualmente** el product_id
+4. Crea segunda factura con la **MISMA descripción**
+5. ✅ Verifica que el sistema use la corrección del usuario (aprendizaje)
+
+**Resultado esperado:** La segunda factura debe usar el product_id corregido por el usuario, no buscar por similitud.
+
+---
 
 ### Ejecutar Prueba Completa (con sincronización)
 
@@ -225,13 +268,71 @@ SELECT * FROM find_similar_product(
 
 ---
 
+## 🎓 Cómo Funciona el Aprendizaje
+
+### Prioridad de Búsqueda
+
+El sistema usa un enfoque de **2 pasos** con prioridad:
+
+**PASO 1: APRENDIZAJE (Prioridad Alta)**
+- Busca en `invoice_items` del mismo `user_id`
+- Con la **misma descripción exacta**
+- Que ya tengan `product_id` asignado (corrección manual del usuario)
+- Toma el más reciente (`ORDER BY id DESC LIMIT 1`)
+
+**PASO 2: SIMILITUD (Prioridad Baja)**
+- Solo si NO encontró en el paso 1
+- Busca en `invoice_products` por similitud de texto (trigram)
+- Threshold: 0.3 (30% de similitud mínima)
+
+### Ejemplo Práctico
+
+**Escenario:**
+
+1. **Primera factura** (ID: 1001)
+   - Item: `"tornillo hexagonal 1/2x2 acero inox"`
+   - Sistema asigna por similitud: `product_id = 123` (TORNILLO HEXAGONAL 1/2 X 2)
+   - Usuario **corrige** manualmente: `product_id = 456` (TORNILLO ESPECIAL 1/2X2)
+
+2. **Segunda factura** (ID: 1002)
+   - Item: `"tornillo hexagonal 1/2x2 acero inox"` (misma descripción)
+   - Sistema busca en facturas anteriores
+   - **Encuentra** la corrección del usuario en factura 1001
+   - Asigna automáticamente: `product_id = 456` ✅ (sin buscar por similitud)
+
+3. **Tercera factura** (ID: 1003)
+   - Item: `"tornillo hexagonal 1/2x2 acero inox"` (misma descripción)
+   - Sistema busca en facturas anteriores
+   - **Encuentra** la corrección en factura 1001 (o 1002)
+   - Asigna automáticamente: `product_id = 456` ✅
+
+**Resultado:** El usuario solo corrige UNA VEZ, el sistema aprende para siempre.
+
+### Logs del Sistema
+
+El sistema genera logs diferentes según el método usado:
+
+**Log de Aprendizaje:**
+```
+NOTICE: LEARNED match: item_id=2115, description="tornillo hexagonal 1/2x2 acero inox",
+        learned_product_id=456, code=TORN-ESP, product_desc="TORNILLO ESPECIAL 1/2X2"
+        (from previous user correction)
+```
+
+**Log de Similitud:**
+```
+NOTICE: SIMILARITY match: item_id=2114, description="tanque plastico",
+        matched_product_id=123, code=TANQ-1000, product_desc="TANQUE PLASTICO 1000L",
+        similarity=0.85
+```
+
 ## ⚠️ Limitaciones Actuales
 
-1. **Solo búsqueda por texto** - Usa trigram similarity, no embeddings vectoriales
+1. **Búsqueda por texto en similitud** - Usa trigram similarity, no embeddings vectoriales
 2. **Threshold fijo** - Requiere modificar función SQL para cambiar threshold (actualmente 0.3 = 30%)
-3. **Sin aprendizaje** - No mejora con el tiempo
+3. **Aprendizaje por descripción exacta** - Solo aprende si la descripción es idéntica (case-sensitive)
 4. **Idioma único** - Optimizado para español
-5. **Precisión variable** - Con threshold 0.3 puede dar falsos positivos
+5. **Precisión variable en similitud** - Con threshold 0.3 puede dar falsos positivos
 
 ## 🔧 Problemas Comunes
 

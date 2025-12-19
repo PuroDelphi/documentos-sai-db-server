@@ -40,6 +40,7 @@
     "test-inventory-products": "node src/scripts/testInventoryWithProducts.js",
     "test-auto-match": "node src/scripts/testAutoMatchProducts.js",
     "test-auto-match-full": "node src/scripts/testAutoMatchWithSync.js",
+    "test-learning": "node src/scripts/testLearningSystem.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
