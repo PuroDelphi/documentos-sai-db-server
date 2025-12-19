@@ -110,13 +110,13 @@ async function syncProductsFromFirebird() {
 }
 
 async function testAutoMatch(products) {
-  console.log('\n📄 PASO 2: Crear factura de prueba tipo EA\n');
+  console.log('\n📄 PASO 2: Crear factura de prueba tipo inventario\n');
 
   const { data: invoice, error: invoiceError } = await supabase
     .from('invoices')
     .insert({
       user_id: userUUID,
-      invoice_type: 'EA',
+      invoice_type: 'inventario',
       invoice_number: `TEST-AUTO-${Date.now()}`,
       date: new Date().toISOString().split('T')[0],
       num_identificacion: '900123456-7',

@@ -92,9 +92,13 @@ SELECT ... FROM find_similar_product(NEW.description, NEW.user_id, 0.3) fp;
 
 El auto-emparejamiento **SOLO** se aplica a facturas de tipo inventario:
 
-- ✅ **EA** (Entrada de Almacén)
-- ✅ **OC** (Orden de Compra)
-- ❌ **FIA** (Factura por Pagar) - NO se auto-empareja
+- ✅ **"inventario"** - Facturas de inventario (EA, OC en Firebird)
+- ❌ **"servicio"** - Facturas de servicio - NO se auto-empareja
+- ❌ **"libre"** - Facturas libres - NO se auto-empareja
+
+**Nota:** En Supabase los tipos son diferentes a Firebird:
+- Supabase: `"inventario"`, `"servicio"`, `"libre"`
+- Firebird: `EA`, `OC`, `FIA`
 
 ---
 
@@ -224,9 +228,33 @@ SELECT * FROM find_similar_product(
 ## ⚠️ Limitaciones Actuales
 
 1. **Solo búsqueda por texto** - Usa trigram similarity, no embeddings vectoriales
-2. **Threshold fijo** - Requiere modificar función SQL para cambiar threshold
+2. **Threshold fijo** - Requiere modificar función SQL para cambiar threshold (actualmente 0.3 = 30%)
 3. **Sin aprendizaje** - No mejora con el tiempo
 4. **Idioma único** - Optimizado para español
+5. **Precisión variable** - Con threshold 0.3 puede dar falsos positivos
+
+## 🔧 Problemas Comunes
+
+### El auto-emparejamiento no funciona
+
+**Verificar:**
+
+1. **Tipo de factura:** Debe ser `invoice_type = 'inventario'`
+   ```sql
+   SELECT invoice_type FROM invoices WHERE id = YOUR_INVOICE_ID;
+   ```
+
+2. **Productos sincronizados:** Debe haber productos con `sync_status IN ('SYNCED', 'SINCRONIZADO')`
+   ```sql
+   SELECT COUNT(*) FROM invoice_products
+   WHERE user_id = YOUR_USER_ID
+   AND sync_status IN ('SYNCED', 'SINCRONIZADO');
+   ```
+
+3. **Similitud suficiente:** La descripción debe tener al menos 30% de similitud
+   ```sql
+   SELECT * FROM find_similar_product('TU DESCRIPCION', 'YOUR_USER_ID', 0.3);
+   ```
 
 ---
 

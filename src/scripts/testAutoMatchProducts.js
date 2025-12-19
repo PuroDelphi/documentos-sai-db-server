@@ -44,7 +44,7 @@ async function main() {
       .from('invoice_products')
       .select('id, item_code, description')
       .eq('user_id', userUUID)
-      .eq('sync_status', 'SINCRONIZADO')
+      .in('sync_status', ['SINCRONIZADO', 'SYNCED'])
       .limit(5);
 
     if (productsError) {
@@ -62,19 +62,19 @@ async function main() {
       console.log(`   ${i + 1}. [${p.item_code}] ${p.description}`);
     });
 
-    // 2. Crear factura de prueba tipo EA
-    console.log('\n📄 PASO 2: Crear factura de prueba tipo EA\n');
+    // 2. Crear factura de prueba tipo inventario
+    console.log('\n📄 PASO 2: Crear factura de prueba tipo inventario\n');
 
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
         user_id: userUUID,
-        tipo: 'EA',
+        invoice_type: 'inventario',
         invoice_number: `TEST-AUTO-MATCH-${Date.now()}`,
-        invoice_date: new Date().toISOString().split('T')[0],
-        nit: '900123456-7',
-        third_party_name: 'PROVEEDOR DE PRUEBA AUTO-MATCH',
-        total_amount: 100000,
+        date: new Date().toISOString().split('T')[0],
+        num_identificacion: '900123456-7',
+        billing_name: 'PROVEEDOR DE PRUEBA AUTO-MATCH',
+        total: 100000,
         estado: 'PENDIENTE'
       })
       .select()
