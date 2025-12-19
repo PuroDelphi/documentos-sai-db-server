@@ -228,8 +228,34 @@ async function testDirectFirebirdInventory() {
     );
     logger.info(`✓ Consecutivo actualizado a ${consecutiveNumber + 1}`);
 
-    // 11. Verificar datos insertados
-    logger.info('\n11. Verificando datos insertados en Firebird...');
+    // 11. Ejecutar procedimiento CONTABILIZAR_EA (opcional)
+    const contabilizarEA = process.env.CONTABILIZAR_EA === 'true';
+    if (contabilizarEA) {
+      logger.info('\n11. Ejecutando procedimiento CONTABILIZAR_EA...');
+
+      // Verificar que el procedimiento existe
+      const procedureExists = await firebirdClient.query(`
+        SELECT COUNT(*) as PROCEDURE_COUNT
+        FROM RDB$PROCEDURES
+        WHERE RDB$PROCEDURE_NAME = 'CONTABILIZAR_EA'
+      `);
+
+      if (procedureExists[0]?.PROCEDURE_COUNT > 0) {
+        const documento = 'EA'; // TIPO en TIPDOC
+        await firebirdClient.query(
+          'EXECUTE PROCEDURE CONTABILIZAR_EA(?, ?, ?, ?, ?)',
+          [consecutiveNumber, documentClass, 1, 1, documento]
+        );
+        logger.info(`✓ Procedimiento CONTABILIZAR_EA ejecutado exitosamente`);
+      } else {
+        logger.warn('⚠️ Procedimiento CONTABILIZAR_EA no existe en la base de datos');
+      }
+    } else {
+      logger.info('\n11. CONTABILIZAR_EA deshabilitado (CONTABILIZAR_EA=false)');
+    }
+
+    // 12. Verificar datos insertados
+    logger.info('\n12. Verificando datos insertados en Firebird...');
 
     const ipVerify = await firebirdClient.query(
       'SELECT * FROM IP WHERE TIPO = ? AND NUMBER = ?',

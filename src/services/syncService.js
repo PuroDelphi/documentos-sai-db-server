@@ -40,6 +40,7 @@ class SyncService {
       syncOC: process.env.SYNC_OC === 'true', // Sincronizar a Órdenes de Compra
       eaDocumentType: process.env.EA_DOCUMENT_TYPE || 'EAI',
       ocDocumentType: process.env.OC_DOCUMENT_TYPE || 'OCI',
+      contabilizarEA: process.env.CONTABILIZAR_EA === 'true', // Contabilizar EA automáticamente
     };
   }
 
@@ -55,6 +56,7 @@ class SyncService {
       if (this.syncConfig.syncEA) {
         await this.ensureTipdocExists(this.syncConfig.eaDocumentType);
         logger.info(`Sincronización EA habilitada con tipo de documento: ${this.syncConfig.eaDocumentType}`);
+        logger.info(`Contabilización automática de EA: ${this.syncConfig.contabilizarEA ? 'HABILITADA' : 'DESHABILITADA'}`);
       }
 
       if (this.syncConfig.syncOC) {
@@ -311,6 +313,50 @@ class SyncService {
       logger.info(`Procedimiento CXCXP_RECONTABILIZAR_DOC ejecutado exitosamente para batch ${BATCH}`);
     } catch (error) {
       logger.error('Error ejecutando procedimiento CXCXP_RECONTABILIZAR_DOC:', error);
+      logger.error('Detalles del error:', {
+        message: error.message,
+        code: error.code,
+        sqlState: error.sqlState
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Ejecuta el procedimiento CONTABILIZAR_EA
+   * @param {number} number - Número del documento (consecutivo)
+   * @param {string} tipo - Tipo de documento (EAI)
+   * @param {number} e - Empresa
+   * @param {number} s - Sucursal
+   */
+  async executeContabilizarEA(number, tipo, e, s) {
+    try {
+      // Determinar el DOCUMENTO basado en el tipo
+      // Para EAI, el documento es 'EA'
+      const documento = tipo.startsWith('EA') ? 'EA' : tipo.substring(0, 2);
+
+      logger.info(`Ejecutando CONTABILIZAR_EA con parámetros: NUMBER=${number}, TIPO='${tipo}', E=${e}, S=${s}, DOCUMENTO='${documento}'`);
+
+      // Verificar que el procedimiento existe antes de ejecutarlo
+      const procedureExists = await this.firebirdClient.query(`
+        SELECT COUNT(*) as PROCEDURE_COUNT
+        FROM RDB$PROCEDURES
+        WHERE RDB$PROCEDURE_NAME = 'CONTABILIZAR_EA'
+      `);
+
+      if (procedureExists[0]?.PROCEDURE_COUNT === 0) {
+        logger.warn('Procedimiento CONTABILIZAR_EA no existe en la base de datos');
+        return;
+      }
+
+      // Ejecutar procedimiento con los 5 parámetros
+      await this.firebirdClient.query(`
+        EXECUTE PROCEDURE CONTABILIZAR_EA(?, ?, ?, ?, ?)
+      `, [number, tipo, e, s, documento]);
+
+      logger.info(`Procedimiento CONTABILIZAR_EA ejecutado exitosamente para EA ${number}`);
+    } catch (error) {
+      logger.error('Error ejecutando procedimiento CONTABILIZAR_EA:', error);
       logger.error('Detalles del error:', {
         message: error.message,
         code: error.code,
@@ -583,6 +629,11 @@ class SyncService {
 
       // Actualizar consecutivo
       await this.updateConsecutiveForDocType(this.syncConfig.eaDocumentType, consecutiveNumber);
+
+      // Contabilizar EA si está habilitado
+      if (this.syncConfig.contabilizarEA) {
+        await this.executeContabilizarEA(consecutiveNumber, this.syncConfig.eaDocumentType, ipDefaults.E, ipDefaults.S);
+      }
 
       // Determinar mensaje de respuesta
       const serviceResponse = invoiceData.thirdPartyCreated
