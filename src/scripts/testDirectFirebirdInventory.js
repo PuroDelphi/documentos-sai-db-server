@@ -20,32 +20,35 @@ async function testDirectFirebirdInventory() {
     await firebirdClient.initialize();
     logger.info('✓ Conectado a Firebird');
 
-    // 1. Verificar/crear tipo de documento EA (máximo 2 caracteres)
-    logger.info('\n1. Verificando tipo de documento EA...');
-    const documentType = 'EA'; // Firebird TIPO es VARCHAR(2)
-    
+    // 1. Verificar tipo de documento EAI
+    // En TIPDOC: TIPO='EA', CLASE='EAI'
+    // En IP/IPDET/ITEMACT: TIPO='EAI' (la clase)
+    logger.info('\n1. Verificando tipo de documento EAI...');
+    const documentClass = 'EAI'; // CLASE en TIPDOC
+    const documentType = 'EA';   // TIPO en TIPDOC
+
     const tipdocExists = await firebirdClient.query(
-      'SELECT FIRST 1 TIPO FROM TIPDOC WHERE TIPO = ?',
-      [documentType]
+      'SELECT FIRST 1 CLASE FROM TIPDOC WHERE TIPO = ? AND CLASE = ?',
+      [documentType, documentClass]
     );
 
     if (tipdocExists.length === 0) {
-      logger.info(`Creando tipo de documento ${documentType}...`);
+      logger.info(`Creando tipo de documento ${documentClass}...`);
       await firebirdClient.query(
-        `INSERT INTO TIPDOC (TIPO, DESCRIPCION, CONSECUTIVO, VALOR_INICIAL)
-         VALUES (?, ?, ?, ?)`,
-        [documentType, 'Entrada Almacén', 1, 1]
+        `INSERT INTO TIPDOC (TIPO, CLASE, E, S, CONSECUTIVO, DESCRIPCION, NO_APLICA_NIIF, ENVIAFACELECT, PREFIJO_DIAN, RDESDE, RHASTA, CONTINGENCIA_FACT_ELECT, DOC_ELEC_POS)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [documentType, documentClass, 1, 1, 1, 'ENTRADA DE ALMACEN IA          ', 'N', 'N', '', 0, 0, 'N', 'N']
       );
-      logger.info(`✓ Tipo de documento ${documentType} creado`);
+      logger.info(`✓ Tipo de documento ${documentClass} creado`);
     } else {
-      logger.info(`✓ Tipo de documento ${documentType} ya existe`);
+      logger.info(`✓ Tipo de documento ${documentClass} ya existe`);
     }
 
     // 2. Obtener siguiente consecutivo
     logger.info('\n2. Obteniendo siguiente consecutivo...');
     const tipdocData = await firebirdClient.query(
-      'SELECT CONSECUTIVO FROM TIPDOC WHERE TIPO = ?',
-      [documentType]
+      'SELECT CONSECUTIVO FROM TIPDOC WHERE TIPO = ? AND CLASE = ?',
+      [documentType, documentClass]
     );
     const consecutiveNumber = tipdocData[0].CONSECUTIVO;
     logger.info(`✓ Consecutivo actual: ${consecutiveNumber}`);
@@ -53,22 +56,22 @@ async function testDirectFirebirdInventory() {
     // 2.1. Limpiar registros de prueba anteriores con este consecutivo
     logger.info('\n2.1. Limpiando registros de prueba anteriores...');
 
-    // Eliminar de ITEMACT
+    // Eliminar de ITEMACT (usa CLASE como TIPO)
     await firebirdClient.query(
       'DELETE FROM ITEMACT WHERE TIPO = ? AND BATCH = ?',
-      [documentType, consecutiveNumber]
+      [documentClass, consecutiveNumber]
     );
 
-    // Eliminar de IPDET
+    // Eliminar de IPDET (usa CLASE como TIPO)
     await firebirdClient.query(
       'DELETE FROM IPDET WHERE TIPO = ? AND NUMBER = ?',
-      [documentType, consecutiveNumber]
+      [documentClass, consecutiveNumber]
     );
 
-    // Eliminar de IP
+    // Eliminar de IP (usa CLASE como TIPO)
     await firebirdClient.query(
       'DELETE FROM IP WHERE TIPO = ? AND NUMBER = ?',
-      [documentType, consecutiveNumber]
+      [documentClass, consecutiveNumber]
     );
 
     logger.info('✓ Registros de prueba anteriores eliminados (si existían)');
@@ -149,7 +152,7 @@ async function testDirectFirebirdInventory() {
     const ipData = await inventoryMapper.mapToIP(
       mockInvoice,
       consecutiveNumber,
-      documentType,
+      documentClass, // Usar CLASE (EAI) como TIPO en IP
       ipDefaults
     );
     logger.info(`✓ IP mapeado: TIPO=${ipData.TIPO}, NUMBER=${ipData.NUMBER}, ID_N=${ipData.ID_N}`);
@@ -178,7 +181,7 @@ async function testDirectFirebirdInventory() {
         item,
         conteo,
         consecutiveNumber,
-        documentType,
+        documentClass, // Usar CLASE (EAI) como TIPO en IPDET
         ipdetDefaults
       );
 
@@ -198,7 +201,7 @@ async function testDirectFirebirdInventory() {
         item,
         mockInvoice,
         consecutiveNumber,
-        documentType,
+        documentClass, // Usar CLASE (EAI) como TIPO en ITEMACT
         ipDefaults,
         ipdetDefaults
       );
@@ -217,32 +220,32 @@ async function testDirectFirebirdInventory() {
 
     logger.info(`✓ ${mockItems.length} items insertados correctamente`);
 
-    // 10. Actualizar consecutivo
+    // 10. Actualizar consecutivo en TIPDOC
     logger.info('\n10. Actualizando consecutivo...');
     await firebirdClient.query(
-      'UPDATE TIPDOC SET CONSECUTIVO = ? WHERE TIPO = ?',
-      [consecutiveNumber + 1, documentType]
+      'UPDATE TIPDOC SET CONSECUTIVO = ? WHERE TIPO = ? AND CLASE = ?',
+      [consecutiveNumber + 1, documentType, documentClass]
     );
     logger.info(`✓ Consecutivo actualizado a ${consecutiveNumber + 1}`);
 
     // 11. Verificar datos insertados
     logger.info('\n11. Verificando datos insertados en Firebird...');
-    
+
     const ipVerify = await firebirdClient.query(
       'SELECT * FROM IP WHERE TIPO = ? AND NUMBER = ?',
-      [documentType, consecutiveNumber]
+      [documentClass, consecutiveNumber]
     );
     logger.info(`✓ IP: ${ipVerify.length} registro(s) encontrado(s)`);
 
     const ipdetVerify = await firebirdClient.query(
       'SELECT * FROM IPDET WHERE TIPO = ? AND NUMBER = ?',
-      [documentType, consecutiveNumber]
+      [documentClass, consecutiveNumber]
     );
     logger.info(`✓ IPDET: ${ipdetVerify.length} registro(s) encontrado(s)`);
 
     const itemactVerify = await firebirdClient.query(
       'SELECT * FROM ITEMACT WHERE TIPO = ? AND BATCH = ?',
-      [documentType, consecutiveNumber]
+      [documentClass, consecutiveNumber]
     );
     logger.info(`✓ ITEMACT: ${itemactVerify.length} registro(s) encontrado(s)`);
 

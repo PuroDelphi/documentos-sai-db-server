@@ -89,6 +89,16 @@ class SyncService {
         // Generar descripción basada en el tipo de documento
         const description = this.generateDocumentDescription(documentType);
 
+        // Determinar el TIPO según el documento
+        // Para inventario (EAI, OCI, etc.) usar 'EA' u 'OC'
+        // Para facturas (FIA, etc.) usar 'FP'
+        let tipoField = 'FP'; // Por defecto para facturas
+        if (documentType.startsWith('EA')) {
+          tipoField = 'EA'; // Entradas de Almacén
+        } else if (documentType.startsWith('OC')) {
+          tipoField = 'OC'; // Órdenes de Compra
+        }
+
         await this.firebirdClient.query(`
           INSERT INTO TIPDOC (
             TIPO, CLASE, E, S, CONSECUTIVO, DESCRIPCION, SIGLA, USERNAME,
@@ -98,12 +108,12 @@ class SyncService {
             TIPOCONSUMO, DOC_ELEC_POS, DIST_MANDANTE, ID_N
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
-          'FP', documentType, 1, 1, 1, description, null, null,
+          tipoField, documentType, 1, 1, 1, description, null, null,
           null, null, null, null, null, 'N', 'N', '', 0, 0, 'N',
           null, null, 0, 'N', 'N', null, null
         ]);
 
-        logger.info(`Tipo ${documentType} creado exitosamente en TIPDOC con consecutivo inicial 1`);
+        logger.info(`Tipo ${documentType} creado exitosamente en TIPDOC (TIPO=${tipoField}, CLASE=${documentType}) con consecutivo inicial 1`);
       } else {
         logger.info(`Tipo ${documentType} ya existe en TIPDOC`);
         // Verificar que el consecutivo sea válido
