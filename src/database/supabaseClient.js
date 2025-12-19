@@ -30,9 +30,16 @@ class SupabaseClient {
       }
 
       // Obtener items de la factura (filtrado por usuario)
+      // Incluir JOIN con invoice_products para obtener item_code (necesario para EA/OC)
       const { data: items, error: itemsError } = await this.client
         .from('invoice_items')
-        .select('*')
+        .select(`
+          *,
+          product:invoice_products (
+            item_code,
+            description
+          )
+        `)
         .eq('invoice_id', invoiceId)
         .eq('user_id', this.userUUID);
 

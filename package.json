@@ -37,6 +37,7 @@
     "test-extract-idn": "node src/scripts/testExtractIdN.js",
     "test-inventory-sync": "node src/scripts/testInventorySync.js",
     "test-direct-firebird": "node src/scripts/testDirectFirebirdInventory.js",
+    "test-inventory-products": "node src/scripts/testInventoryWithProducts.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

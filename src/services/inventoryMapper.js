@@ -291,18 +291,28 @@ class InventoryMapper {
   }
 
   /**
-   * Extrae el código del producto de la descripción
+   * Extrae el código del producto de la descripción o del producto amarrado
    * @param {Object} item - Item de la factura
    * @returns {string} - Código del producto
    */
   extractProductCode(item) {
-    // Si la descripción tiene formato "CODIGO - Descripción", extraer el código
+    // PRIORIDAD 1: Si tiene product_id amarrado (para EA/OC), usar item_code del producto
+    if (item.product && item.product.item_code) {
+      return item.product.item_code.trim();
+    }
+
+    // PRIORIDAD 2: Si la descripción tiene formato "CODIGO - Descripción", extraer el código
     if (item.description && item.description.includes(' - ')) {
       const parts = item.description.split(' - ');
       return parts[0].trim();
     }
 
     // Si no hay formato especial, retornar vacío
+    logger.warn('Item sin código de producto:', {
+      description: item.description,
+      product_id: item.product_id,
+      hasProduct: !!item.product
+    });
     return '';
   }
 
