@@ -100,7 +100,18 @@ El auto-emparejamiento **SOLO** se aplica a facturas de tipo inventario:
 
 ## 🧪 Pruebas
 
-### Ejecutar Prueba
+### Ejecutar Prueba Completa (con sincronización)
+
+```bash
+npm run test-auto-match-full
+```
+
+Esta prueba:
+1. Sincroniza productos desde Firebird
+2. Crea factura de prueba
+3. Inserta items y verifica auto-emparejamiento
+
+### Ejecutar Prueba Simple (requiere datos existentes)
 
 ```bash
 npm run test-auto-match
