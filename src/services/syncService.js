@@ -1,6 +1,7 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
 const DataMapper = require('./dataMapper');
+const InventoryMapper = require('./inventoryMapper');
 const ThirdPartySyncService = require('./thirdPartySyncService');
 const ThirdPartyCreationService = require('./thirdPartyCreationService');
 const ChartOfAccountsSyncService = require('./chartOfAccountsSyncService');
@@ -12,6 +13,7 @@ class SyncService {
     this.firebirdClient = firebirdClient || new FirebirdClient();
     this.supabaseClient = supabaseClient || new SupabaseClient();
     this.dataMapper = new DataMapper();
+    this.inventoryMapper = new InventoryMapper(this.firebirdClient);
     this.thirdPartySyncService = new ThirdPartySyncService();
     this.thirdPartyCreationService = new ThirdPartyCreationService(this.firebirdClient);
     this.chartOfAccountsSyncService = new ChartOfAccountsSyncService();
@@ -33,6 +35,11 @@ class SyncService {
       enableRecovery: process.env.ENABLE_INVOICE_RECOVERY !== 'false', // Por defecto habilitado
       recoveryBatchSize: parseInt(process.env.RECOVERY_BATCH_SIZE) || 10, // Procesar de a 10 facturas
       enableAutoThirdPartyCreation: process.env.ENABLE_AUTO_THIRD_PARTY_CREATION !== 'false', // Por defecto habilitado
+      // Configuración de sincronización de inventario
+      syncEA: process.env.SYNC_EA === 'true', // Sincronizar a Entradas de Almacén
+      syncOC: process.env.SYNC_OC === 'true', // Sincronizar a Órdenes de Compra
+      eaDocumentType: process.env.EA_DOCUMENT_TYPE || 'EAI',
+      ocDocumentType: process.env.OC_DOCUMENT_TYPE || 'OCI',
     };
   }
 
@@ -43,6 +50,18 @@ class SyncService {
     try {
       await this.firebirdClient.initialize();
       await this.ensureTipdocExists();
+
+      // Crear tipos de documento para inventario si están habilitados
+      if (this.syncConfig.syncEA) {
+        await this.ensureTipdocExists(this.syncConfig.eaDocumentType);
+        logger.info(`Sincronización EA habilitada con tipo de documento: ${this.syncConfig.eaDocumentType}`);
+      }
+
+      if (this.syncConfig.syncOC) {
+        await this.ensureTipdocExists(this.syncConfig.ocDocumentType);
+        logger.info(`Sincronización OC habilitada con tipo de documento: ${this.syncConfig.ocDocumentType}`);
+      }
+
       logger.info('Servicio de sincronización inicializado');
       logger.info(`Creación automática de terceros: ${this.syncConfig.enableAutoThirdPartyCreation ? 'HABILITADA' : 'DESHABILITADA'}`);
     } catch (error) {
@@ -53,10 +72,11 @@ class SyncService {
 
   /**
    * Verifica que el tipo de documento configurado exista en TIPDOC, si no lo crea
+   * @param {string} customDocType - Tipo de documento personalizado (opcional)
    */
-  async ensureTipdocExists() {
+  async ensureTipdocExists(customDocType = null) {
     try {
-      const documentType = this.dataMapper.getDocumentType();
+      const documentType = customDocType || this.dataMapper.getDocumentType();
 
       const existingType = await this.firebirdClient.query(
         'SELECT * FROM TIPDOC WHERE CLASE = ? AND E = ? AND S = ?',
@@ -91,7 +111,7 @@ class SyncService {
         logger.info(`Consecutivo actual en TIPDOC para ${documentType}: ${currentConsecutive}`);
       }
     } catch (error) {
-      const documentType = this.dataMapper.getDocumentType();
+      const documentType = customDocType || this.dataMapper.getDocumentType();
       logger.error(`Error verificando/creando tipo ${documentType}:`, error);
       throw error;
     }
@@ -108,7 +128,9 @@ class SyncService {
       'CXC': 'CUENTA POR COBRAR',
       'REC': 'RECIBO DE CAJA',
       'COM': 'COMPROBANTE',
-      'NOT': 'NOTA CONTABLE'
+      'NOT': 'NOTA CONTABLE',
+      'EAI': 'ENTRADA DE ALMACEN IA',
+      'OCI': 'ORDEN DE COMPRA IA'
     };
 
     return descriptions[documentType] || `DOCUMENTO TIPO ${documentType}`;
@@ -381,42 +403,20 @@ class SyncService {
         throw new Error('La factura no tiene entradas contables');
       }
 
-      // Verificar y ajustar NITs de terceros
-      const validatedInvoiceData = await this.validateAndFixThirdParties(invoiceData);
+      // Detectar tipo de factura y rutear según corresponda
+      const invoiceType = invoiceData.invoice?.invoice_type || 'servicio'; // Por defecto 'servicio'
 
-      // Obtener próximo batch
-      const batch = await this.getNextBatch();
+      logger.info(`Tipo de factura detectado: ${invoiceType}`);
 
-      // Mapear datos con NITs validados
-      const carproenData = this.dataMapper.mapToCarproen(validatedInvoiceData, batch);
-      const carprodeData = this.dataMapper.mapToCarprode(validatedInvoiceData, batch);
+      if (invoiceType === 'inventario') {
+        // Procesar como factura de inventario
+        await this.processInventoryInvoice(invoiceData);
+      } else {
+        // Procesar como factura de servicio/libre (lógica actual)
+        await this.processServiceInvoice(invoiceData);
+      }
 
-      // Ejecutar inserción en transacción
-      await this.firebirdClient.transaction(async (transaction) => {
-        // Insertar en CARPROEN
-        await this.insertCarproen(transaction, carproenData);
-
-        // Insertar en CARPRODE
-        for (const entry of carprodeData) {
-          await this.insertCarprode(transaction, entry);
-        }
-      });
-
-      // Ejecutar procedimiento de recontabilización
-      await this.executeRecontabilizarDoc(carproenData);
-
-      // Actualizar consecutivo
-      await this.updateConsecutive(batch);
-
-      // Determinar mensaje de respuesta según si se creó un tercero
-      const serviceResponse = validatedInvoiceData.thirdPartyCreated
-        ? 'Ok, tercero creado automáticamente, por favor revise en el sistema'
-        : 'Ok';
-
-      // Actualizar estado en Supabase como exitoso
-      await this.supabaseClient.updateInvoiceStatus(invoice.id, 'SINCRONIZADO', serviceResponse);
-
-      logger.info(`Factura ${invoice.invoice_number} procesada exitosamente con batch ${batch}`);
+      logger.info(`Factura ${invoice.invoice_number} procesada exitosamente`);
 
     } catch (error) {
       logger.error(`Error procesando factura ${invoice.invoice_number}:`, error);
@@ -428,6 +428,211 @@ class SyncService {
         logger.error(`Error actualizando estado de factura ${invoice.invoice_number}:`, updateError);
       }
 
+      throw error;
+    }
+  }
+
+  /**
+   * Procesa una factura de servicio/libre (lógica original)
+   * @param {Object} invoiceData - Datos completos de la factura
+   */
+  async processServiceInvoice(invoiceData) {
+    // Verificar y ajustar NITs de terceros
+    const validatedInvoiceData = await this.validateAndFixThirdParties(invoiceData);
+
+    // Obtener próximo batch
+    const batch = await this.getNextBatch();
+
+    // Mapear datos con NITs validados
+    const carproenData = this.dataMapper.mapToCarproen(validatedInvoiceData, batch);
+    const carprodeData = this.dataMapper.mapToCarprode(validatedInvoiceData, batch);
+
+    // Ejecutar inserción en transacción
+    await this.firebirdClient.transaction(async (transaction) => {
+      // Insertar en CARPROEN
+      await this.insertCarproen(transaction, carproenData);
+
+      // Insertar en CARPRODE
+      for (const entry of carprodeData) {
+        await this.insertCarprode(transaction, entry);
+      }
+    });
+
+    // Ejecutar procedimiento de recontabilización
+    await this.executeRecontabilizarDoc(carproenData);
+
+    // Actualizar consecutivo
+    await this.updateConsecutive(batch);
+
+    // Determinar mensaje de respuesta según si se creó un tercero
+    const serviceResponse = validatedInvoiceData.thirdPartyCreated
+      ? 'Ok, tercero creado automáticamente, por favor revise en el sistema'
+      : 'Ok';
+
+    // Actualizar estado en Supabase como exitoso
+    await this.supabaseClient.updateInvoiceStatus(validatedInvoiceData.invoice.id, 'SINCRONIZADO', serviceResponse);
+  }
+
+  /**
+   * Procesa una factura de inventario
+   * @param {Object} invoiceData - Datos completos de la factura
+   */
+  async processInventoryInvoice(invoiceData) {
+    // Verificar configuración
+    if (!this.syncConfig.syncEA && !this.syncConfig.syncOC) {
+      throw new Error('Sincronización de inventario no habilitada. Configure SYNC_EA o SYNC_OC en .env');
+    }
+
+    // Verificar y ajustar NITs de terceros
+    const validatedInvoiceData = await this.validateAndFixThirdParties(invoiceData);
+
+    // Procesar según configuración
+    if (this.syncConfig.syncEA) {
+      await this.processWarehouseEntry(validatedInvoiceData);
+    }
+
+    // OC se implementará en el futuro
+    if (this.syncConfig.syncOC) {
+      logger.warn('Sincronización a Órdenes de Compra (OC) aún no implementada');
+    }
+  }
+
+  /**
+   * Procesa una Entrada de Almacén (EA)
+   * @param {Object} invoiceData - Datos validados de la factura
+   */
+  async processWarehouseEntry(invoiceData) {
+    try {
+      const { invoice, items } = invoiceData;
+
+      // Verificar que tenga items
+      if (!items || items.length === 0) {
+        throw new Error('La factura de inventario no tiene items');
+      }
+
+      // Obtener próximo consecutivo para EA
+      const consecutiveNumber = await this.getNextBatchForDocType(this.syncConfig.eaDocumentType);
+
+      // Obtener valores por defecto
+      const ipDefaults = await this.inventoryMapper.getDefaultValuesForIP();
+      const ipdetDefaults = await this.inventoryMapper.getDefaultValuesForIPDET();
+
+      // Mapear datos a IP (encabezado)
+      const ipData = await this.inventoryMapper.mapToIP(
+        invoice,
+        consecutiveNumber,
+        this.syncConfig.eaDocumentType,
+        ipDefaults
+      );
+
+      // Mapear items a IPDET (detalle) e ITEMACT (kardex)
+      const ipdetDataArray = [];
+      const itemactDataArray = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const conteo = i + 1; // Contador de línea
+
+        // Mapear a IPDET
+        const ipdetData = await this.inventoryMapper.mapToIPDET(
+          item,
+          conteo,
+          consecutiveNumber,
+          this.syncConfig.eaDocumentType,
+          ipdetDefaults
+        );
+        ipdetDataArray.push(ipdetData);
+
+        // Mapear a ITEMACT (Kardex)
+        const itemactData = await this.inventoryMapper.mapToITEMACT(
+          item,
+          invoice,
+          consecutiveNumber,
+          this.syncConfig.eaDocumentType,
+          ipDefaults,
+          ipdetDefaults
+        );
+        itemactDataArray.push(itemactData);
+      }
+
+      // Ejecutar inserción en transacción
+      await this.firebirdClient.transaction(async (transaction) => {
+        // Insertar en IP (encabezado)
+        await this.insertIP(transaction, ipData);
+
+        // Insertar en IPDET (detalle)
+        for (const ipdetData of ipdetDataArray) {
+          await this.insertIPDET(transaction, ipdetData);
+        }
+
+        // Insertar en ITEMACT (kardex)
+        for (const itemactData of itemactDataArray) {
+          await this.insertITEMACT(transaction, itemactData);
+        }
+      });
+
+      // Actualizar consecutivo
+      await this.updateConsecutiveForDocType(this.syncConfig.eaDocumentType, consecutiveNumber);
+
+      // Determinar mensaje de respuesta
+      const serviceResponse = invoiceData.thirdPartyCreated
+        ? 'Ok, tercero creado automáticamente, por favor revise en el sistema'
+        : 'Ok';
+
+      // Actualizar estado en Supabase como exitoso
+      await this.supabaseClient.updateInvoiceStatus(invoice.id, 'SINCRONIZADO', serviceResponse);
+
+      logger.info(`Entrada de Almacén procesada exitosamente con consecutivo ${consecutiveNumber}`);
+
+    } catch (error) {
+      logger.error('Error procesando Entrada de Almacén:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene el próximo consecutivo para un tipo de documento específico
+   * @param {string} documentType - Tipo de documento
+   * @returns {Promise<number>} - Próximo consecutivo
+   */
+  async getNextBatchForDocType(documentType) {
+    try {
+      const result = await this.firebirdClient.query(
+        'SELECT CONSECUTIVO FROM TIPDOC WHERE CLASE = ? AND E = ? AND S = ?',
+        [documentType, 1, 1]
+      );
+
+      if (result.length === 0) {
+        throw new Error(`Tipo ${documentType} no encontrado en TIPDOC`);
+      }
+
+      const consecutivo = result[0]?.CONSECUTIVO || 1;
+      logger.info(`Próximo consecutivo para ${documentType}: ${consecutivo}`);
+      return consecutivo;
+    } catch (error) {
+      logger.error(`Error obteniendo próximo consecutivo para ${documentType}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza el consecutivo para un tipo de documento específico
+   * @param {string} documentType - Tipo de documento
+   * @param {number} usedConsecutive - Consecutivo usado
+   */
+  async updateConsecutiveForDocType(documentType, usedConsecutive) {
+    try {
+      const nextConsecutive = usedConsecutive + 1;
+
+      await this.firebirdClient.query(`
+        UPDATE TIPDOC
+        SET CONSECUTIVO = ?
+        WHERE CLASE = ? AND E = 1 AND S = 1
+      `, [nextConsecutive, documentType]);
+
+      logger.info(`Consecutivo actualizado de ${usedConsecutive} a ${nextConsecutive} para tipo ${documentType}`);
+    } catch (error) {
+      logger.error(`Error actualizando consecutivo para ${documentType}:`, error);
       throw error;
     }
   }
@@ -572,6 +777,118 @@ class SyncService {
       });
     } catch (error) {
       logger.error('Error preparando inserción CARPRODE:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Inserta un registro en IP (Entrada de Almacén - Encabezado)
+   */
+  async insertIP(transaction, data) {
+    try {
+      const fields = Object.keys(data).join(', ');
+      const placeholders = Object.keys(data).map(() => '?').join(', ');
+      const values = Object.values(data);
+
+      const sql = `INSERT INTO IP (${fields}) VALUES (${placeholders})`;
+
+      logger.debug('Insertando en IP:', { sql, values });
+
+      return new Promise((resolve, reject) => {
+        transaction.query(sql, values, (err, result) => {
+          if (err) {
+            logger.error('Error insertando en IP:', {
+              error: err.message,
+              sql,
+              data: Object.keys(data).map(key => ({
+                field: key,
+                value: data[key],
+                length: typeof data[key] === 'string' ? data[key].length : 'N/A'
+              }))
+            });
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      });
+    } catch (error) {
+      logger.error('Error preparando inserción IP:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Inserta un registro en IPDET (Entrada de Almacén - Detalle)
+   */
+  async insertIPDET(transaction, data) {
+    try {
+      const fields = Object.keys(data).join(', ');
+      const placeholders = Object.keys(data).map(() => '?').join(', ');
+      const values = Object.values(data);
+
+      const sql = `INSERT INTO IPDET (${fields}) VALUES (${placeholders})`;
+
+      logger.debug('Insertando en IPDET:', { sql, values });
+
+      return new Promise((resolve, reject) => {
+        transaction.query(sql, values, (err, result) => {
+          if (err) {
+            logger.error('Error insertando en IPDET:', {
+              error: err.message,
+              sql,
+              data: Object.keys(data).map(key => ({
+                field: key,
+                value: data[key],
+                length: typeof data[key] === 'string' ? data[key].length : 'N/A'
+              }))
+            });
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      });
+    } catch (error) {
+      logger.error('Error preparando inserción IPDET:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Inserta un registro en ITEMACT (Kardex)
+   */
+  async insertITEMACT(transaction, data) {
+    try {
+      // CONTEO es auto-increment, no se debe incluir en el INSERT
+      const fields = Object.keys(data).filter(key => key !== 'CONTEO').join(', ');
+      const placeholders = Object.keys(data).filter(key => key !== 'CONTEO').map(() => '?').join(', ');
+      const values = Object.values(data).filter((_, index) => Object.keys(data)[index] !== 'CONTEO');
+
+      const sql = `INSERT INTO ITEMACT (${fields}) VALUES (${placeholders})`;
+
+      logger.debug('Insertando en ITEMACT:', { sql, values });
+
+      return new Promise((resolve, reject) => {
+        transaction.query(sql, values, (err, result) => {
+          if (err) {
+            logger.error('Error insertando en ITEMACT:', {
+              error: err.message,
+              sql,
+              data: Object.keys(data).filter(key => key !== 'CONTEO').map(key => ({
+                field: key,
+                value: data[key],
+                length: typeof data[key] === 'string' ? data[key].length : 'N/A'
+              }))
+            });
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      });
+    } catch (error) {
+      logger.error('Error preparando inserción ITEMACT:', error);
       throw error;
     }
   }
