@@ -2,16 +2,18 @@ const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
 const DataMapper = require('./dataMapper');
 const ThirdPartySyncService = require('./thirdPartySyncService');
+const ThirdPartyCreationService = require('./thirdPartyCreationService');
 const ChartOfAccountsSyncService = require('./chartOfAccountsSyncService');
 const ProductSyncService = require('./productSyncService');
 const logger = require('../utils/logger');
 
 class SyncService {
-  constructor() {
-    this.firebirdClient = new FirebirdClient();
-    this.supabaseClient = new SupabaseClient();
+  constructor(firebirdClient = null, supabaseClient = null) {
+    this.firebirdClient = firebirdClient || new FirebirdClient();
+    this.supabaseClient = supabaseClient || new SupabaseClient();
     this.dataMapper = new DataMapper();
     this.thirdPartySyncService = new ThirdPartySyncService();
+    this.thirdPartyCreationService = new ThirdPartyCreationService(this.firebirdClient);
     this.chartOfAccountsSyncService = new ChartOfAccountsSyncService();
     this.productSyncService = new ProductSyncService();
 
@@ -26,10 +28,11 @@ class SyncService {
     this.syncConfig = {
       thirdPartiesInterval: (parseInt(process.env.THIRD_PARTIES_SYNC_INTERVAL) || 30) * 60 * 1000,
       chartOfAccountsInterval: (parseInt(process.env.CHART_OF_ACCOUNTS_SYNC_INTERVAL) || 60) * 60 * 1000,
-      productsInterval: (parseInt(process.env.PRODUCTS_SYNC_INTERVAL) || 45) * 60 * 1000,
+      productsInterval: (parseInt(process.env.PRODUCTS_SYNC_INTERVAL) || 45) * 1000,
       initialDelay: (parseInt(process.env.INITIAL_SYNC_DELAY) || 2) * 60 * 1000,
       enableRecovery: process.env.ENABLE_INVOICE_RECOVERY !== 'false', // Por defecto habilitado
       recoveryBatchSize: parseInt(process.env.RECOVERY_BATCH_SIZE) || 10, // Procesar de a 10 facturas
+      enableAutoThirdPartyCreation: process.env.ENABLE_AUTO_THIRD_PARTY_CREATION !== 'false', // Por defecto habilitado
     };
   }
 
@@ -41,6 +44,7 @@ class SyncService {
       await this.firebirdClient.initialize();
       await this.ensureTipdocExists();
       logger.info('Servicio de sincronización inicializado');
+      logger.info(`Creación automática de terceros: ${this.syncConfig.enableAutoThirdPartyCreation ? 'HABILITADA' : 'DESHABILITADA'}`);
     } catch (error) {
       logger.error('Error inicializando servicio:', error);
       throw error;
@@ -122,25 +126,8 @@ class SyncService {
 
     logger.debug(`Buscando tercero con variaciones:`, variations);
 
-    // Primero buscar en la tabla sincronizada de Supabase (más rápido)
-    for (const nitVariation of variations) {
-      try {
-        const { data, error } = await this.supabaseClient.client
-          .from('invoice_third_parties')
-          .select('id_n')
-          .eq('id_n', nitVariation)
-          .single();
-
-        if (!error && data) {
-          logger.info(`Tercero encontrado en tabla sincronizada: ${originalNit} -> ${nitVariation}`);
-          return nitVariation;
-        }
-      } catch (error) {
-        logger.debug(`Tercero ${nitVariation} no encontrado en tabla sincronizada`);
-      }
-    }
-
-    // Si no se encuentra en Supabase, buscar directamente en Firebird como fallback
+    // Buscar DIRECTAMENTE en Firebird (fuente de verdad)
+    // No usar Supabase porque puede estar desactualizado
     for (const nitVariation of variations) {
       try {
         const result = await this.firebirdClient.query(
@@ -149,7 +136,7 @@ class SyncService {
         );
 
         if (result.length > 0) {
-          logger.info(`Tercero encontrado en Firebird (fallback): ${originalNit} -> ${nitVariation}`);
+          logger.info(`Tercero encontrado en Firebird: ${originalNit} -> ${nitVariation}`);
           return nitVariation;
         }
       } catch (error) {
@@ -421,8 +408,13 @@ class SyncService {
       // Actualizar consecutivo
       await this.updateConsecutive(batch);
 
+      // Determinar mensaje de respuesta según si se creó un tercero
+      const serviceResponse = validatedInvoiceData.thirdPartyCreated
+        ? 'Ok, tercero creado automáticamente, por favor revise en el sistema'
+        : 'Ok';
+
       // Actualizar estado en Supabase como exitoso
-      await this.supabaseClient.updateInvoiceStatus(invoice.id, 'SINCRONIZADO', 'Ok');
+      await this.supabaseClient.updateInvoiceStatus(invoice.id, 'SINCRONIZADO', serviceResponse);
 
       logger.info(`Factura ${invoice.invoice_number} procesada exitosamente con batch ${batch}`);
 
@@ -447,16 +439,43 @@ class SyncService {
    */
   async validateAndFixThirdParties(invoiceData) {
     const { invoice, entries } = invoiceData;
+    let thirdPartyCreated = false; // Flag para indicar si se creó un tercero
 
     // Validar NIT principal de la factura
     if (invoice.num_identificacion) {
-      const validNit = await this.findExistingThird(invoice.num_identificacion);
+      let validNit = await this.findExistingThird(invoice.num_identificacion);
+
       if (validNit) {
-        invoice.num_identificacion = validNit;
-        logger.info(`NIT principal corregido: ${invoice.num_identificacion} -> ${validNit}`);
+        // Tercero encontrado, actualizar si es diferente
+        if (validNit !== invoice.num_identificacion) {
+          logger.info(`NIT principal corregido: ${invoice.num_identificacion} -> ${validNit}`);
+          invoice.num_identificacion = validNit;
+        }
       } else {
+        // Tercero NO encontrado
         logger.warn(`NIT principal no encontrado en CUST: ${invoice.num_identificacion}`);
-        throw new Error(`Tercero no encontrado en CUST: ${invoice.num_identificacion}`);
+
+        // Verificar si la creación automática está habilitada
+        if (this.syncConfig.enableAutoThirdPartyCreation) {
+          logger.info(`Creando tercero automáticamente desde datos de factura...`);
+
+          try {
+            // Crear tercero en CUST y SHIPTO
+            const createdNit = await this.thirdPartyCreationService.createThirdPartyFromInvoice(invoiceData);
+
+            // Usar el NIT creado
+            invoice.num_identificacion = createdNit;
+            thirdPartyCreated = true; // Marcar que se creó un tercero
+            logger.info(`✓ Tercero creado exitosamente: ${createdNit}`);
+
+          } catch (creationError) {
+            logger.error(`Error creando tercero automáticamente:`, creationError);
+            throw new Error(`No se pudo crear el tercero ${invoice.num_identificacion}: ${creationError.message}`);
+          }
+        } else {
+          // Creación automática deshabilitada - rechazar factura
+          throw new Error(`El tercero ${invoice.num_identificacion} no existe en Firebird. Creación automática deshabilitada (ENABLE_AUTO_THIRD_PARTY_CREATION=false)`);
+        }
       }
     }
 
@@ -480,7 +499,7 @@ class SyncService {
       }
     }
 
-    return { invoice, entries, items: invoiceData.items };
+    return { invoice, entries, items: invoiceData.items, thirdPartyCreated };
   }
 
   /**

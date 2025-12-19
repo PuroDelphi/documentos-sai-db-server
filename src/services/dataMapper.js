@@ -37,6 +37,25 @@ class DataMapper {
   }
 
   /**
+   * Extrae el ID_N (sin guión y sin dígito de verificación) de un NIT
+   * @param {string} nit - NIT completo (puede tener guión o no)
+   * @returns {string} - ID_N sin guión ni dígito de verificación
+   */
+  extractIdN(nit) {
+    if (!nit) return '';
+
+    const nitStr = nit.toString().trim();
+
+    // Si tiene guión, tomar solo la parte antes del guión
+    if (nitStr.includes('-')) {
+      return nitStr.split('-')[0].trim();
+    }
+
+    // Si no tiene guión, retornar tal cual
+    return nitStr;
+  }
+
+  /**
    * Obtiene el tipo de documento configurado
    * @returns {string} - Tipo de documento (ej: 'FIA', 'FAC', etc.)
    */
@@ -96,7 +115,7 @@ class DataMapper {
         S: 1,
         TIPO: this.documentType,
         BATCH: batch,
-        ID_N: (invoice.num_identificacion || '').substring(0, 30),
+        ID_N: this.extractIdN(invoice.num_identificacion).substring(0, 30),
         FECHA: invoiceDate,
         TOTAL: total,
         USERNAME: 'SYSTEM'.substring(0, 10),
@@ -120,7 +139,7 @@ class DataMapper {
         PROYECTO: null,
         SALDO_DEUDA: null,
         SALDO_DEUDA_ABONO: null,
-        PONUMBER: (invoice.invoice_number || '').substring(0, 30), // Número de factura de Supabase
+        PONUMBER: (invoice.invoice_number || '').substring(0, 20), // Número de factura de Supabase (máx 20 caracteres)
         INTERES_IMPLICITO: 'N',
         DETALLE: ''.substring(0, 1024),
         FECHA_CONTAB_CONSIG: 'N',
@@ -195,7 +214,7 @@ class DataMapper {
           CONTEO: null, // Se asignará automáticamente por la BD
           TIPO: this.documentType,
           BATCH: batch,
-          ID_N: (entry.third_party_nit || invoice.num_identificacion || '').substring(0, 30),
+          ID_N: this.extractIdN(entry.third_party_nit || invoice.num_identificacion).substring(0, 30),
           ACCT: parseFloat(entry.account_code) || 0,
           E: 1,
           S: 1,

@@ -29,6 +29,12 @@
     "test-pinecone": "node src/scripts/testPineconeSync.js",
     "sync-products-to-pinecone": "node src/scripts/syncProductsToPinecone.js",
     "search-products": "node src/scripts/searchProducts.js",
+    "test-third-party-creation": "node src/scripts/testThirdPartyCreation.js",
+    "test-auto-third-party-flow": "node src/scripts/testAutoThirdPartyCreationFlow.js",
+    "test-third-party-nit": "node src/scripts/testThirdPartyNitReturn.js",
+    "test-realtime": "node src/scripts/testRealtimeConnection.js",
+    "diagnose-third-party": "node src/scripts/diagnoseThirdPartyIssue.js",
+    "test-extract-idn": "node src/scripts/testExtractIdN.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

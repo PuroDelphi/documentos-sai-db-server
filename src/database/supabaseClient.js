@@ -75,21 +75,35 @@ class SupabaseClient {
           event: 'UPDATE',
           schema: 'public',
           table: 'invoices',
-          filter: `estado=eq.APROBADO,user_id=eq.${this.userUUID}`
+          filter: `user_id=eq.${this.userUUID}`
         },
         async (payload) => {
           const invoice = payload.new;
+          const oldInvoice = payload.old;
+
+          // Solo procesar si el estado cambió a APROBADO
+          if (invoice.estado !== 'APROBADO') {
+            logger.debug(`Factura ${invoice.invoice_number} actualizada pero no está en estado APROBADO (estado: ${invoice.estado}), omitiendo`);
+            return;
+          }
+
+          // Solo procesar si el estado cambió (no estaba APROBADO antes)
+          if (oldInvoice && oldInvoice.estado === 'APROBADO') {
+            logger.debug(`Factura ${invoice.invoice_number} ya estaba en estado APROBADO, omitiendo`);
+            return;
+          }
 
           logger.info('Factura aprobada detectada:', {
             id: invoice.id,
             invoice_number: invoice.invoice_number,
             estado: invoice.estado,
+            estado_anterior: oldInvoice?.estado,
             service_response: invoice.service_response,
             fecha_hora_sync: invoice.fecha_hora_sync
           });
 
           // Verificar si ya fue procesada exitosamente
-          if (invoice.service_response === 'Ok') {
+          if (invoice.service_response === 'Ok' || invoice.service_response?.includes('tercero creado automáticamente')) {
             logger.info(`Factura ${invoice.invoice_number} ya fue sincronizada exitosamente, omitiendo procesamiento`);
             return;
           }
@@ -101,9 +115,19 @@ class SupabaseClient {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          logger.info('✅ Listener de Supabase Realtime SUSCRITO exitosamente');
+        } else if (status === 'CHANNEL_ERROR') {
+          logger.error('❌ Error en el canal de Supabase Realtime');
+        } else if (status === 'TIMED_OUT') {
+          logger.error('❌ Timeout en la suscripción de Supabase Realtime');
+        } else if (status === 'CLOSED') {
+          logger.warn('⚠️ Canal de Supabase Realtime cerrado');
+        }
+      });
 
-    logger.info('Listener de Supabase Realtime configurado');
+    logger.info('Configurando listener de Supabase Realtime...');
     return channel;
   }
 
