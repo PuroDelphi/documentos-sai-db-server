@@ -221,7 +221,7 @@ class InventoryMapper {
       ID_N: idN.substring(0, 30),
       ACCT: defaults.ACCT || null,
       PONUMBER: (invoice.invoice_number || '').substring(0, 15),
-      FECHA: invoice.invoice_date ? new Date(invoice.invoice_date) : new Date(),
+      FECHA: invoice.date ? new Date(invoice.date) : new Date(),
       COST: total,
       POSTED: defaults.POSTED,
       CLOSED: defaults.CLOSED,
@@ -248,15 +248,15 @@ class InventoryMapper {
       VALORRTICA: 0,
       TOTALSDCT: 0,
       TOTALCDCT: 0,
-      DUEDATE: invoice.invoice_date ? new Date(invoice.invoice_date) : new Date(),
+      DUEDATE: invoice.date ? new Date(invoice.date) : new Date(),
       E: defaults.E,
       S: defaults.S,
       SUCCLIENTE: defaults.SUCCLIENTE,
       DOCASC: defaults.DOCASC,
       ENTMC: defaults.ENTMC,
       REVISADO: defaults.REVISADO,
-      FECHA_ENTREGA: invoice.invoice_date ? new Date(invoice.invoice_date) : new Date(),
-      FECHA_REQUISICION: invoice.invoice_date ? new Date(invoice.invoice_date) : new Date(),
+      FECHA_ENTREGA: invoice.date ? new Date(invoice.date) : new Date(),
+      FECHA_REQUISICION: invoice.date ? new Date(invoice.date) : new Date(),
       ID_USUARIO: 'SYSTEM',
       OCNUMERO: '',
       IMPORTACION: defaults.IMPORTACION,
@@ -291,6 +291,22 @@ class InventoryMapper {
   }
 
   /**
+   * Extrae el código del producto de la descripción
+   * @param {Object} item - Item de la factura
+   * @returns {string} - Código del producto
+   */
+  extractProductCode(item) {
+    // Si la descripción tiene formato "CODIGO - Descripción", extraer el código
+    if (item.description && item.description.includes(' - ')) {
+      const parts = item.description.split(' - ');
+      return parts[0].trim();
+    }
+
+    // Si no hay formato especial, retornar vacío
+    return '';
+  }
+
+  /**
    * Mapea items de factura a estructura IPDET (Entrada de Almacén - Detalle)
    * @param {Object} item - Item de la factura desde Supabase
    * @param {number} conteo - Número de línea (contador)
@@ -302,19 +318,17 @@ class InventoryMapper {
   async mapToIPDET(item, conteo, consecutiveNumber, documentType, defaults) {
     const quantity = parseFloat(item.quantity || 0);
     const unitPrice = parseFloat(item.unit_price || 0);
-    const ivaRate = parseFloat(item.iva_rate || 0);
-    const subtotal = parseFloat(item.subtotal || 0);
-    const ivaAmount = parseFloat(item.iva_amount || 0);
+    const subtotal = quantity * unitPrice; // Calcular subtotal
 
-    // Calcular precio con IVA
-    const priceWithIva = unitPrice * (1 + ivaRate / 100);
+    // Extraer código del producto
+    const productCode = this.extractProductCode(item);
 
     return {
       TIPO: documentType.substring(0, 3),
       NUMBER: consecutiveNumber,
       CONTEO: conteo,
-      ITEM: (item.product_id || '').substring(0, 30),
-      LOCATION: (item.location || defaults.LOCATION || '01').substring(0, 3),
+      ITEM: productCode.substring(0, 30),
+      LOCATION: (defaults.LOCATION || '01').substring(0, 3),
       COST: unitPrice,
       QTY: quantity,
       QTYREC: defaults.QTYREC,
@@ -409,19 +423,22 @@ class InventoryMapper {
    * @returns {Object} - Datos mapeados para ITEMACT
    */
   async mapToITEMACT(item, invoice, consecutiveNumber, documentType, ipDefaults, ipdetDefaults) {
-    const idN = this.extractIdN(invoice.third_party_nit || invoice.num_identificacion);
+    const idN = this.extractIdN(invoice.num_identificacion);
     const quantity = parseFloat(item.quantity || 0);
     const unitPrice = parseFloat(item.unit_price || 0);
-    const subtotal = parseFloat(item.subtotal || 0);
+    const subtotal = quantity * unitPrice; // Calcular subtotal
+
+    // Extraer código del producto
+    const productCode = this.extractProductCode(item);
 
     return {
       // CONTEO se auto-genera en Firebird (auto-increment)
-      LOCATION: (item.location || ipdetDefaults.LOCATION || '01').substring(0, 3),
-      ITEM: (item.product_id || '').substring(0, 30),
+      LOCATION: (ipdetDefaults.LOCATION || '01').substring(0, 3),
+      ITEM: productCode.substring(0, 30),
       ID_N: idN.substring(0, 30),
       TIPO: documentType.substring(0, 3),
       BATCH: consecutiveNumber,
-      FECHA: invoice.invoice_date ? new Date(invoice.invoice_date) : new Date(),
+      FECHA: invoice.date ? new Date(invoice.date) : new Date(),
       QTY: quantity, // Cantidad positiva para entradas
       VALUNIT: unitPrice,
       VALCDCT: 0,

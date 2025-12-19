@@ -9,27 +9,33 @@ const logger = require('../utils/logger');
 
 async function testInventorySync() {
   const supabaseClient = new SupabaseClient();
+  const userUUID = supabaseClient.userUUID;
 
   try {
     logger.info('=== INICIANDO PRUEBA DE SINCRONIZACIÓN DE INVENTARIO ===');
+    logger.info(`Usuario: ${userUUID}`);
 
     // 1. Crear factura de prueba tipo "inventario"
     logger.info('\n1. Creando factura de prueba tipo "inventario"...');
 
     const testInvoice = {
+      user_id: userUUID,
       invoice_number: `TEST-INV-${Date.now()}`,
-      invoice_date: new Date().toISOString(),
+      date: new Date().toISOString().split('T')[0], // Formato YYYY-MM-DD
       invoice_type: 'inventario', // IMPORTANTE: tipo inventario
       num_identificacion: '900672435', // NIT de prueba
-      third_party_name: 'PROVEEDOR DE PRUEBA INVENTARIO',
-      third_party_nit: '900672435',
+      billing_name: 'PROVEEDOR DE PRUEBA INVENTARIO',
+      billing_street: 'Calle 123 # 45-67',
+      billing_city: 'Bogotá',
+      billing_state: 'Cundinamarca',
+      billing_country: 'Colombia',
       subtotal: 100000,
-      total_iva: 19000,
+      tax: 19000,
       total: 119000,
       estado: 'BORRADOR'
     };
 
-    const { data: invoice, error: invoiceError } = await supabaseClient.supabase
+    const { data: invoice, error: invoiceError } = await supabaseClient.client
       .from('invoices')
       .insert(testInvoice)
       .select()
@@ -46,32 +52,24 @@ async function testInventorySync() {
 
     const testItems = [
       {
+        user_id: userUUID,
         invoice_id: invoice.id,
-        product_id: 'PROD001', // Debe existir en ITEM de Firebird
-        description: 'Producto de prueba 1',
+        description: 'PROD001 - Producto de prueba 1',
         quantity: 10,
         unit_price: 5000,
-        subtotal: 50000,
-        iva_rate: 19,
-        iva_amount: 9500,
-        total: 59500,
-        location: '01' // Bodega por defecto
+        total_price: 50000
       },
       {
+        user_id: userUUID,
         invoice_id: invoice.id,
-        product_id: 'PROD002', // Debe existir en ITEM de Firebird
-        description: 'Producto de prueba 2',
+        description: 'PROD002 - Producto de prueba 2',
         quantity: 5,
         unit_price: 10000,
-        subtotal: 50000,
-        iva_rate: 19,
-        iva_amount: 9500,
-        total: 59500,
-        location: '01'
+        total_price: 50000
       }
     ];
 
-    const { data: items, error: itemsError } = await supabaseClient.supabase
+    const { data: items, error: itemsError } = await supabaseClient.client
       .from('invoice_items')
       .insert(testItems)
       .select();
@@ -87,16 +85,20 @@ async function testInventorySync() {
 
     const testEntries = [
       {
+        user_id: userUUID,
         invoice_id: invoice.id,
         account_code: '22050101', // Cuenta de inventario
+        account_name: 'Inventarios',
         debit: 119000,
         credit: 0,
         description: 'Entrada de inventario',
         third_party_nit: '900672435'
       },
       {
+        user_id: userUUID,
         invoice_id: invoice.id,
         account_code: '11050501', // Cuenta de bancos
+        account_name: 'Bancos',
         debit: 0,
         credit: 119000,
         description: 'Pago de inventario',
@@ -104,8 +106,8 @@ async function testInventorySync() {
       }
     ];
 
-    const { data: entries, error: entriesError } = await supabaseClient.supabase
-      .from('invoice_accounting_entries')
+    const { data: entries, error: entriesError } = await supabaseClient.client
+      .from('accounting_entries')
       .insert(testEntries)
       .select();
 
@@ -118,7 +120,7 @@ async function testInventorySync() {
     // 4. Aprobar la factura para que se sincronice
     logger.info('\n4. Aprobando factura para sincronización...');
 
-    const { error: updateError } = await supabaseClient.supabase
+    const { error: updateError } = await supabaseClient.client
       .from('invoices')
       .update({ estado: 'APROBADO' })
       .eq('id', invoice.id);
@@ -133,7 +135,7 @@ async function testInventorySync() {
     logger.info('\n5. Esperando sincronización (30 segundos)...');
     await new Promise(resolve => setTimeout(resolve, 30000));
 
-    const { data: syncedInvoice } = await supabaseClient.supabase
+    const { data: syncedInvoice } = await supabaseClient.client
       .from('invoices')
       .select('*')
       .eq('id', invoice.id)
