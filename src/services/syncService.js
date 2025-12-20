@@ -726,13 +726,15 @@ class SyncService {
 
     // Validar NIT principal de la factura
     if (invoice.num_identificacion) {
-      let validNit = await this.findExistingThird(invoice.num_identificacion);
+      let validIdN = await this.findExistingThird(invoice.num_identificacion);
 
-      if (validNit) {
-        // Tercero encontrado, actualizar si es diferente
-        if (validNit !== invoice.num_identificacion) {
-          logger.info(`NIT principal corregido: ${invoice.num_identificacion} -> ${validNit}`);
-          invoice.num_identificacion = validNit;
+      if (validIdN) {
+        // Tercero encontrado en Firebird
+        // NO sobrescribir invoice.num_identificacion
+        // El NIT original debe mantenerse para Supabase
+        // El dataMapper.extractIdN() extraerá el ID_N cuando sea necesario para CARPROEN
+        if (validIdN !== invoice.num_identificacion) {
+          logger.info(`Tercero encontrado en Firebird: NIT original=${invoice.num_identificacion}, ID_N en Firebird=${validIdN}`);
         }
       } else {
         // Tercero NO encontrado
@@ -744,12 +746,16 @@ class SyncService {
 
           try {
             // Crear tercero en CUST y SHIPTO
-            const createdNit = await this.thirdPartyCreationService.createThirdPartyFromInvoice(invoiceData);
+            // El método createThirdPartyFromInvoice ya maneja correctamente:
+            // - ID_N en CUST: solo números (ej: 890399003)
+            // - NIT en CUST: formato completo (ej: 890399003-4)
+            const createdIdN = await this.thirdPartyCreationService.createThirdPartyFromInvoice(invoiceData);
 
-            // Usar el NIT creado
-            invoice.num_identificacion = createdNit;
+            // NO sobrescribir invoice.num_identificacion
+            // El NIT original debe mantenerse para Supabase
+            // El dataMapper.extractIdN() se encargará de extraer el ID_N cuando sea necesario
             thirdPartyCreated = true; // Marcar que se creó un tercero
-            logger.info(`✓ Tercero creado exitosamente: ${createdNit}`);
+            logger.info(`✓ Tercero creado exitosamente: ID_N=${createdIdN}, NIT original=${invoice.num_identificacion}`);
 
           } catch (creationError) {
             logger.error(`Error creando tercero automáticamente:`, creationError);
@@ -765,11 +771,14 @@ class SyncService {
     // Validar NITs en entradas contables
     for (const entry of entries) {
       if (entry.third_party_nit) {
-        const validNit = await this.findExistingThird(entry.third_party_nit);
-        if (validNit) {
-          if (validNit !== entry.third_party_nit) {
-            logger.info(`NIT de entrada contable corregido: ${entry.third_party_nit} -> ${validNit}`);
-            entry.third_party_nit = validNit;
+        const validIdN = await this.findExistingThird(entry.third_party_nit);
+        if (validIdN) {
+          // Tercero encontrado en Firebird
+          // NO sobrescribir entry.third_party_nit
+          // El NIT original debe mantenerse para Supabase
+          // El dataMapper.extractIdN() extraerá el ID_N cuando sea necesario para CARPRODE
+          if (validIdN !== entry.third_party_nit) {
+            logger.info(`Tercero de entrada contable encontrado: NIT original=${entry.third_party_nit}, ID_N en Firebird=${validIdN}`);
           }
         } else {
           // Si no se encuentra, usar el NIT principal de la factura
