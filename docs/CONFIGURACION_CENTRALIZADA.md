@@ -198,12 +198,101 @@ Para modificar la configuración operativa:
 
 ## 🎯 Ventajas del Sistema
 
-✅ **Seguridad**: Credenciales encriptadas, configuración con RLS  
-✅ **Multi-tenant**: Cada usuario tiene su propia configuración  
-✅ **Centralizado**: Configuración en Supabase, fácil de gestionar  
-✅ **Caché local**: Acceso rápido sin depender de Supabase  
-✅ **Fallback**: Si Supabase no está disponible, usa caché local  
-✅ **Sincronización**: Actualización automática en segundo plano  
+✅ **Seguridad**: Credenciales encriptadas, configuración con RLS
+✅ **Multi-tenant**: Cada usuario tiene su propia configuración
+✅ **Centralizado**: Configuración en Supabase, fácil de gestionar
+✅ **Caché local**: Acceso rápido sin depender de Supabase
+✅ **Fallback**: Si Supabase no está disponible, usa caché local
+✅ **Sincronización**: Actualización automática en segundo plano
+✅ **Validación**: Verifica datos críticos antes de usar el caché
+
+---
+
+## 🔍 Validación de Datos Críticos
+
+### Problema Resuelto
+
+Anteriormente, si el caché local tenía datos incompletos (por ejemplo, `firebird_database` vacío), el servicio intentaba usarlo y fallaba. Ahora el sistema **valida automáticamente** que el caché tenga todos los datos críticos.
+
+### Datos Críticos Validados
+
+El sistema verifica que estén presentes:
+
+1. ✅ **firebird_database** - Ruta a la base de datos Firebird
+2. ✅ **firebird_host** - Host del servidor Firebird
+3. ✅ **firebird_user** - Usuario de Firebird
+
+### Flujo de Validación
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Cargar caché local                                       │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 2. Validar datos críticos                                   │
+│    - ¿Tiene firebird_database?                              │
+│    - ¿Tiene firebird_host?                                  │
+│    - ¿Tiene firebird_user?                                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                ┌─────────────┴─────────────┐
+                │                           │
+                ▼                           ▼
+    ┌───────────────────┐       ┌───────────────────┐
+    │ ✅ DATOS COMPLETOS│       │ ❌ DATOS FALTANTES│
+    │                   │       │                   │
+    │ Usar caché        │       │ Sincronizar desde │
+    │ Sincronizar en    │       │ Supabase AHORA    │
+    │ segundo plano     │       │ (con await)       │
+    └───────────────────┘       └───────────────────┘
+```
+
+### Logs de Validación
+
+**Caché completo:**
+```
+info: ✅ Configuración cargada desde caché local
+info: 🔄 Sincronizando configuración desde Supabase...
+```
+
+**Caché incompleto:**
+```
+info: ✅ Configuración cargada desde caché local
+warn: ⚠️ Caché incompleto (faltan datos críticos de Firebird), sincronizando desde Supabase...
+info: 🔄 Sincronizando configuración desde Supabase...
+info: ✅ Configuración sincronizada desde Supabase
+```
+
+**Sin caché:**
+```
+info: 📭 No hay caché local, descargando configuración desde Supabase...
+info: 🔄 Sincronizando configuración desde Supabase...
+info: ✅ Configuración sincronizada desde Supabase
+```
+
+### Cuándo Eliminar el Caché
+
+Ya **NO es necesario** eliminar el caché manualmente cuando cambias configuración en Supabase. El sistema:
+
+1. ✅ Detecta automáticamente si faltan datos críticos
+2. ✅ Sincroniza inmediatamente desde Supabase
+3. ✅ Actualiza el caché con los nuevos datos
+
+**Solo elimina el caché si:**
+- ❌ El caché está corrupto (error de desencriptación)
+- ❌ Quieres forzar una descarga completa
+- ❌ Estás depurando problemas de configuración
+
+**Comando para eliminar caché:**
+```bash
+# Windows PowerShell
+Remove-Item -Path ".cache\config.encrypted" -Force
+
+# Git Bash / Linux
+rm -f .cache/config.encrypted
+```
 
 ---
 

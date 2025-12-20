@@ -32,17 +32,27 @@ class ConfigService {
 
       // Intentar cargar desde caché primero
       const cachedConfig = this.cache.load(cachePassword);
-      
+
       if (cachedConfig) {
         this.config = cachedConfig;
         logger.info('✅ Configuración cargada desde caché local');
-        
-        // Sincronizar en segundo plano
-        this.syncFromSupabase().catch(err => {
-          logger.warn('⚠️ Error sincronizando configuración desde Supabase:', err.message);
-        });
+
+        // Validar que el caché tenga datos críticos
+        const hasCriticalData = this.validateCriticalData(cachedConfig);
+
+        if (!hasCriticalData) {
+          logger.warn('⚠️ Caché incompleto (faltan datos críticos de Firebird), sincronizando desde Supabase...');
+          // Sincronizar INMEDIATAMENTE (con await) si faltan datos críticos
+          await this.syncFromSupabase();
+        } else {
+          // Solo sincronizar en segundo plano si el caché tiene datos críticos
+          this.syncFromSupabase().catch(err => {
+            logger.warn('⚠️ Error sincronizando configuración desde Supabase:', err.message);
+          });
+        }
       } else {
         // No hay caché, cargar desde Supabase
+        logger.info('📭 No hay caché local, descargando configuración desde Supabase...');
         await this.syncFromSupabase();
       }
 
@@ -182,6 +192,40 @@ class ConfigService {
       logger.error('❌ Error creando configuración por defecto:', error);
       throw error;
     }
+  }
+
+  /**
+   * Validar que la configuración tenga datos críticos
+   * Datos críticos son aquellos necesarios para que el servicio funcione
+   * @param {Object} config - Configuración a validar
+   * @returns {boolean} - true si tiene todos los datos críticos
+   */
+  validateCriticalData(config) {
+    if (!config) {
+      return false;
+    }
+
+    // Validar credenciales de Firebird (críticas para conectar a la base de datos)
+    const hasFirebirdDatabase = config.firebird_database &&
+                                 config.firebird_database.trim() !== '';
+    const hasFirebirdHost = config.firebird_host &&
+                            config.firebird_host.trim() !== '';
+    const hasFirebirdUser = config.firebird_user &&
+                            config.firebird_user.trim() !== '';
+
+    // Log de validación para debugging
+    if (!hasFirebirdDatabase) {
+      logger.debug('⚠️ Validación: falta firebird_database');
+    }
+    if (!hasFirebirdHost) {
+      logger.debug('⚠️ Validación: falta firebird_host');
+    }
+    if (!hasFirebirdUser) {
+      logger.debug('⚠️ Validación: falta firebird_user');
+    }
+
+    // Retornar true solo si TODOS los datos críticos están presentes
+    return hasFirebirdDatabase && hasFirebirdHost && hasFirebirdUser;
   }
 
   /**
