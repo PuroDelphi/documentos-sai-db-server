@@ -1,32 +1,33 @@
 const { convertToWords } = require('../utils/numberToWords');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
 
 class DataMapper {
   constructor() {
     // Configuración para el campo INVC
-    this.useInvoiceNumberForInvc = process.env.USE_INVOICE_NUMBER_FOR_INVC === 'true';
+    this.useInvoiceNumberForInvc = appConfig.get('use_invoice_number_for_invc', false);
 
     // Configuración de proyecto y actividad predeterminados
-    this.defaultProjectCode = process.env.DEFAULT_PROJECT_CODE || null;
-    this.defaultActivityCode = process.env.DEFAULT_ACTIVITY_CODE || null;
+    this.defaultProjectCode = appConfig.get('default_project_code', null);
+    this.defaultActivityCode = appConfig.get('default_activity_code', null);
 
     // Configuración del tipo de documento
-    this.documentType = process.env.DOCUMENT_TYPE || 'FIA';
+    this.documentType = appConfig.get('document_type', 'FIA');
 
     // Validar longitudes según esquema de BD
     if (this.defaultProjectCode && this.defaultProjectCode.length > 10) {
-      logger.warn(`DEFAULT_PROJECT_CODE truncado de ${this.defaultProjectCode.length} a 10 caracteres`);
+      logger.warn(`default_project_code truncado de ${this.defaultProjectCode.length} a 10 caracteres`);
       this.defaultProjectCode = this.defaultProjectCode.substring(0, 10);
     }
 
     if (this.defaultActivityCode && this.defaultActivityCode.length > 3) {
-      logger.warn(`DEFAULT_ACTIVITY_CODE truncado de ${this.defaultActivityCode.length} a 3 caracteres`);
+      logger.warn(`default_activity_code truncado de ${this.defaultActivityCode.length} a 3 caracteres`);
       this.defaultActivityCode = this.defaultActivityCode.substring(0, 3);
     }
 
     // Validar longitud del tipo de documento
     if (this.documentType.length > 3) {
-      logger.warn(`DOCUMENT_TYPE truncado de ${this.documentType.length} a 3 caracteres`);
+      logger.warn(`document_type truncado de ${this.documentType.length} a 3 caracteres`);
       this.documentType = this.documentType.substring(0, 3);
     }
 

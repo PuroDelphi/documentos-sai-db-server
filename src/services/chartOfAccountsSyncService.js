@@ -1,21 +1,28 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
-const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class ChartOfAccountsSyncService {
   constructor() {
     this.firebirdClient = new FirebirdClient();
     this.supabaseClient = new SupabaseClient();
-    this.userUUID = validateAndGetUserUUID();
-    
-    // Configuración de rangos de cuentas a sincronizar
+    this.userUUID = appConfig.getUserUUID();
+
+    // Configuración de rangos de cuentas (se carga en initialize)
+    this.syncConfig = null;
+  }
+
+  /**
+   * Cargar configuración desde appConfig
+   */
+  loadConfig() {
     this.syncConfig = {
-      // Rangos configurables por variables de entorno
-      accountRanges: this.parseAccountRanges(process.env.ACCOUNT_SYNC_RANGES || '1-99999999'),
-      accountExcludeRanges: this.parseAccountRanges(process.env.ACCOUNT_EXCLUDE_RANGES || ''),
-      onlyActiveAccounts: process.env.SYNC_ONLY_ACTIVE_ACCOUNTS !== 'false', // true por defecto
-      excludeZeroLevel: process.env.EXCLUDE_ZERO_LEVEL_ACCOUNTS !== 'false', // true por defecto
+      // Rangos configurables desde Supabase
+      accountRanges: this.parseAccountRanges(appConfig.get('account_sync_ranges', '1-99999999')),
+      accountExcludeRanges: this.parseAccountRanges(appConfig.get('account_exclude_ranges', '')),
+      onlyActiveAccounts: appConfig.get('sync_only_active_accounts', true),
+      excludeZeroLevel: appConfig.get('exclude_zero_level_accounts', true),
     };
   }
 
@@ -49,6 +56,9 @@ class ChartOfAccountsSyncService {
    */
   async initialize() {
     try {
+      // Cargar configuración
+      this.loadConfig();
+
       await this.firebirdClient.initialize();
       logger.info('Servicio de sincronización de cuentas contables inicializado');
       logger.info('Configuración de sincronización:', this.syncConfig);
@@ -100,22 +110,53 @@ class ChartOfAccountsSyncService {
         return { processed: 0, errors: 0 };
       }
 
-      // Procesar cuentas en lotes
-      const batchSize = 20;
+      // Procesar cuentas en lotes con batch upsert (optimizado)
+      const batchSize = 100; // Aumentado de 20 a 100 para mejor rendimiento
       let processed = 0;
       let errors = 0;
 
       for (let i = 0; i < accounts.length; i += batchSize) {
         const batch = accounts.slice(i, i + batchSize);
-        logger.info(`Procesando lote ${Math.floor(i / batchSize) + 1} de ${Math.ceil(accounts.length / batchSize)}`);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(accounts.length / batchSize);
 
-        for (const account of batch) {
-          try {
-            await this.upsertAccount(account);
-            processed++;
-          } catch (error) {
-            logger.error(`Error procesando cuenta ${account.ACCT}:`, error);
-            errors++;
+        logger.info(`Procesando lote ${batchNumber} de ${totalBatches} (${batch.length} registros)`);
+
+        try {
+          // Mapear todos los registros del batch
+          const mappedRecords = batch.map(account => ({
+            ...this.mapAcctToSupabase(account),
+            user_id: this.userUUID,
+            last_sync_at: new Date().toISOString(),
+            sync_status: 'SYNCED',
+            sync_error: null
+          }));
+
+          // Batch upsert - mucho más rápido que uno por uno
+          const { error } = await this.supabaseClient.client
+            .from('invoice_chart_of_accounts')
+            .upsert(mappedRecords, {
+              onConflict: 'account_code,user_id',
+              ignoreDuplicates: false
+            });
+
+          if (error) throw error;
+
+          processed += batch.length;
+          logger.info(`✅ Lote ${batchNumber} procesado exitosamente: ${batch.length} cuentas`);
+
+        } catch (error) {
+          logger.error(`❌ Error en lote ${batchNumber}, procesando registros individualmente:`, error.message);
+
+          // Fallback: procesar uno por uno para identificar registros problemáticos
+          for (const account of batch) {
+            try {
+              await this.upsertAccount(account);
+              processed++;
+            } catch (err) {
+              logger.error(`Error procesando cuenta ${account.ACCT}:`, err.message);
+              errors++;
+            }
           }
         }
 
@@ -125,7 +166,7 @@ class ChartOfAccountsSyncService {
         }
       }
 
-      logger.info(`Sincronización de cuentas completada: ${processed} procesadas, ${errors} errores`);
+      logger.info(`✅ Sincronización de cuentas completada: ${processed} procesadas, ${errors} errores`);
       return { processed, errors };
 
     } catch (error) {

@@ -8,6 +8,7 @@ const logger = require('../utils/logger');
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
 const SyncService = require('../services/syncService');
+const { initAppConfig } = require('./helpers/initAppConfig');
 
 async function testAutoThirdPartyCreationFlow() {
   const firebirdClient = new FirebirdClient();
@@ -18,6 +19,9 @@ async function testAutoThirdPartyCreationFlow() {
     logger.info('================================================================================');
     logger.info('PRUEBA DE FLUJO COMPLETO: CREACIÓN AUTOMÁTICA DE TERCEROS');
     logger.info('================================================================================');
+
+    // Inicializar configuración de la aplicación
+    await initAppConfig();
 
     // Conectar a Firebird
     await firebirdClient.initialize();

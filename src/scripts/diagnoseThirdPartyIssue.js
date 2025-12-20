@@ -7,12 +7,16 @@ require('dotenv').config();
 const logger = require('../config/logger');
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
+const { initAppConfig } = require('./helpers/initAppConfig');
 
 async function diagnoseIssue() {
   const firebirdClient = new FirebirdClient();
   const supabaseClient = new SupabaseClient();
 
   try {
+    // Inicializar configuración de la aplicación
+    await initAppConfig();
+
     logger.info('='.repeat(80));
     logger.info('DIAGNÓSTICO: Verificación de NITs en facturas con error');
     logger.info('='.repeat(80));

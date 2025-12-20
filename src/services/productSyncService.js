@@ -1,21 +1,28 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
-const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class ProductSyncService {
   constructor() {
     this.firebirdClient = new FirebirdClient();
     this.supabaseClient = new SupabaseClient();
-    this.userUUID = validateAndGetUserUUID();
-    
-    // Configuración de sincronización
+    this.userUUID = appConfig.getUserUUID();
+
+    // Configuración de sincronización (se carga en initialize)
+    this.syncConfig = null;
+  }
+
+  /**
+   * Cargar configuración desde appConfig
+   */
+  loadConfig() {
     this.syncConfig = {
-      // Filtros configurables por variables de entorno
-      onlyActiveProducts: process.env.SYNC_ONLY_ACTIVE_PRODUCTS !== 'false', // true por defecto
-      onlyInventoryProducts: process.env.SYNC_ONLY_INVENTORY_PRODUCTS === 'true', // false por defecto
-      excludeGroups: this.parseExcludeGroups(process.env.EXCLUDE_PRODUCT_GROUPS || ''),
-      includeGroups: this.parseIncludeGroups(process.env.INCLUDE_PRODUCT_GROUPS || ''),
+      // Filtros configurables desde Supabase
+      onlyActiveProducts: appConfig.get('sync_only_active_products', true),
+      onlyInventoryProducts: appConfig.get('sync_only_inventory_products', false),
+      excludeGroups: this.parseExcludeGroups(appConfig.get('exclude_product_groups', '')),
+      includeGroups: this.parseIncludeGroups(appConfig.get('include_product_groups', '')),
     };
   }
 
@@ -52,6 +59,9 @@ class ProductSyncService {
    */
   async initialize() {
     try {
+      // Cargar configuración
+      this.loadConfig();
+
       await this.firebirdClient.initialize();
       logger.info('Servicio de sincronización de productos inicializado');
       logger.info('Configuración de sincronización:', this.syncConfig);
@@ -140,32 +150,63 @@ class ProductSyncService {
         return { processed: 0, errors: 0 };
       }
 
-      // Procesar productos en lotes
-      const batchSize = 15;
+      // Procesar productos en lotes con batch upsert (optimizado)
+      const batchSize = 100; // Aumentado de 15 a 100 para mejor rendimiento
       let processed = 0;
       let errors = 0;
 
       for (let i = 0; i < products.length; i += batchSize) {
         const batch = products.slice(i, i + batchSize);
-        logger.info(`Procesando lote ${Math.floor(i / batchSize) + 1} de ${Math.ceil(products.length / batchSize)}`);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(products.length / batchSize);
 
-        for (const product of batch) {
-          try {
-            await this.upsertProduct(product);
-            processed++;
-          } catch (error) {
-            logger.error(`Error procesando producto ${product.ITEM}:`, error);
-            errors++;
+        logger.info(`Procesando lote ${batchNumber} de ${totalBatches} (${batch.length} registros)`);
+
+        try {
+          // Mapear todos los registros del batch
+          const mappedRecords = batch.map(product => ({
+            ...this.mapItemToSupabase(product),
+            user_id: this.userUUID,
+            last_sync_at: new Date().toISOString(),
+            sync_status: 'SYNCED',
+            sync_error: null
+          }));
+
+          // Batch upsert - mucho más rápido que uno por uno
+          const { error } = await this.supabaseClient.client
+            .from('invoice_products')
+            .upsert(mappedRecords, {
+              onConflict: 'item_code,user_id',
+              ignoreDuplicates: false
+            });
+
+          if (error) throw error;
+
+          processed += batch.length;
+          logger.info(`✅ Lote ${batchNumber} procesado exitosamente: ${batch.length} productos`);
+
+        } catch (error) {
+          logger.error(`❌ Error en lote ${batchNumber}, procesando registros individualmente:`, error.message);
+
+          // Fallback: procesar uno por uno para identificar registros problemáticos
+          for (const product of batch) {
+            try {
+              await this.upsertProduct(product);
+              processed++;
+            } catch (err) {
+              logger.error(`Error procesando producto ${product.ITEM}:`, err.message);
+              errors++;
+            }
           }
         }
 
         // Pausa pequeña entre lotes para no sobrecargar
         if (i + batchSize < products.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reducido de 100ms a 50ms
         }
       }
 
-      logger.info(`Sincronización de productos completada: ${processed} procesados, ${errors} errores`);
+      logger.info(`✅ Sincronización de productos completada: ${processed} procesados, ${errors} errores`);
       return { processed, errors };
 
     } catch (error) {

@@ -13,6 +13,9 @@ Este servicio sincroniza automáticamente las facturas aprobadas desde Supabase 
 - **API de control** para monitoreo y sincronización manual
 - **Logging completo** para monitoreo y debugging
 - **Manejo robusto de errores**
+- **🔧 Configuración centralizada** en Supabase con caché local encriptado
+- **🔐 Seguridad mejorada** con credenciales encriptadas y RLS
+- **👥 Multi-tenant** con configuración por usuario
 
 ## 📋 Requisitos
 
@@ -34,49 +37,57 @@ cd supabase-firebird-sync
 npm install
 ```
 
-3. **Configurar variables de entorno**
-```bash
-cp .env.example .env
-# Editar .env con tus credenciales
-```
+3. **Configurar base de datos**
 
-4. **Configurar variables de entorno**
-```env
-# Supabase
-SUPABASE_URL=https://tu-proyecto.supabase.co
-SUPABASE_ANON_KEY=tu_clave_anonima
+   Ejecutar la migración para crear la tabla de configuración:
+   ```bash
+   # En Supabase SQL Editor, ejecutar:
+   database/migrations/create_invoice_config_table.sql
+   ```
 
-# Firebird
-FIREBIRD_HOST=localhost
-FIREBIRD_PORT=3050
-FIREBIRD_DATABASE=ruta/a/tu/base.fdb
-FIREBIRD_USER=SYSDBA
-FIREBIRD_PASSWORD=tu_password
+4. **Configurar credenciales**
 
-# Servicio
-LOG_LEVEL=info
-SERVICE_NAME=supabase-firebird-sync
+   Copiar y editar el archivo `.env`:
+   ```bash
+   cp .env.example .env
+   # Editar .env con tus credenciales
+   ```
 
-# Sincronización automática (en minutos)
-THIRD_PARTIES_SYNC_INTERVAL=30
-CHART_OF_ACCOUNTS_SYNC_INTERVAL=60
-PRODUCTS_SYNC_INTERVAL=45
-INITIAL_SYNC_DELAY=2
+   El archivo `.env` ahora contiene **SOLO credenciales sensibles**:
+   ```env
+   # Credenciales de Supabase
+   SUPABASE_URL=https://tu-proyecto.supabase.co
+   SUPABASE_ANON_KEY=tu_anon_key_aqui
 
-# Configuración de cuentas contables
-ACCOUNT_SYNC_RANGES=1000-9999
-SYNC_ONLY_ACTIVE_ACCOUNTS=true
-EXCLUDE_ZERO_LEVEL_ACCOUNTS=true
+   # Credenciales de Firebird
+   FIREBIRD_HOST=localhost
+   FIREBIRD_PORT=3050
+   FIREBIRD_DATABASE=C:/path/to/database.fdb
+   FIREBIRD_USER=SYSDBA
+   FIREBIRD_PASSWORD=tu_password_aqui
 
-# Configuración de productos
-SYNC_ONLY_ACTIVE_PRODUCTS=true
-SYNC_ONLY_INVENTORY_PRODUCTS=false
-EXCLUDE_PRODUCT_GROUPS=
-INCLUDE_PRODUCT_GROUPS=
+   # Usuario del servicio
+   USER_UUID=uuid-del-usuario-en-invoice_user
 
-# API de control (opcional)
-API_PORT=3001
-```
+   # Contraseña para encriptar caché de configuración
+   CONFIG_CACHE_PASSWORD=password_seguro_para_cache
+   ```
+
+5. **Insertar configuración operativa en Supabase**
+
+   Editar y ejecutar el script de configuración:
+   ```bash
+   # 1. Editar database/migrations/insert_default_config.sql
+   # 2. Reemplazar 'TU_USER_UUID_AQUI' con tu UUID real
+   # 3. Ejecutar en Supabase SQL Editor
+   ```
+
+   **Nota**: La configuración operativa (intervalos, rangos, preferencias) ahora se gestiona desde la tabla `invoice_config` en Supabase. Ver [docs/CONFIGURACION_CENTRALIZADA.md](docs/CONFIGURACION_CENTRALIZADA.md) para más detalles.
+
+6. **Encriptar el archivo .env**
+   ```bash
+   npm run encrypt-env
+   ```
 
 ## 🚀 Uso
 
@@ -85,9 +96,68 @@ API_PORT=3001
 npm run dev
 ```
 
-### Producción
+### Producción (Node.js)
 ```bash
 npm start
+```
+
+### 🪟 Instalación como Servicio de Windows
+
+El servicio puede instalarse de **dos formas** según tus necesidades:
+
+#### 🟢 Método A: Instalación Standalone (Recomendado para Producción)
+**Sin Node.js en el servidor de producción**
+
+1. **Compilar todos los ejecutables (en servidor de desarrollo):**
+   ```bash
+   npm run build:complete
+   ```
+   O usar el script batch:
+   ```bash
+   build-complete.bat
+   ```
+
+2. **Copiar al servidor de producción:**
+   - Carpeta `dist/` completa
+   - Archivo `.env.encrypted`
+   - Scripts `install-service-standalone.bat` y `uninstall-service-standalone.bat`
+
+3. **Instalar servicio (como administrador en producción):**
+   ```bash
+   install-service-standalone.bat
+   ```
+
+#### 🔵 Método B: Instalación con Node.js
+**Con Node.js en el servidor de producción**
+
+1. **Compilar ejecutable:**
+   ```bash
+   npm run build
+   ```
+
+2. **Instalar servicio (como Administrador):**
+   ```bash
+   npm run install-service
+   ```
+   O usar el script batch:
+   ```bash
+   install-windows-service.bat
+   ```
+
+**📚 Documentación completa:**
+- [Guía de Instalación Detallada](docs/INSTALACION_SERVICIO_WINDOWS.md)
+- [Comparación de Métodos](docs/METODOS_INSTALACION.md)
+
+**Gestión del servicio:**
+```bash
+# Detener
+net stop SupabaseFirebirdSync
+
+# Iniciar
+net start SupabaseFirebirdSync
+
+# Desinstalar
+npm run uninstall-service
 ```
 
 ### Sincronización de Terceros

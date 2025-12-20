@@ -6,6 +6,7 @@ const ThirdPartySyncService = require('./thirdPartySyncService');
 const ThirdPartyCreationService = require('./thirdPartyCreationService');
 const ChartOfAccountsSyncService = require('./chartOfAccountsSyncService');
 const ProductSyncService = require('./productSyncService');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
 
 class SyncService {
@@ -26,21 +27,28 @@ class SyncService {
       products: null, // Intervalo para sincronización de productos
     };
 
-    // Configuración de tiempos (en milisegundos)
+    // Configuración de tiempos (se carga desde appConfig)
+    this.syncConfig = null;
+  }
+
+  /**
+   * Cargar configuración desde appConfig
+   */
+  loadConfig() {
     this.syncConfig = {
-      thirdPartiesInterval: (parseInt(process.env.THIRD_PARTIES_SYNC_INTERVAL) || 30) * 60 * 1000,
-      chartOfAccountsInterval: (parseInt(process.env.CHART_OF_ACCOUNTS_SYNC_INTERVAL) || 60) * 60 * 1000,
-      productsInterval: (parseInt(process.env.PRODUCTS_SYNC_INTERVAL) || 45) * 1000,
-      initialDelay: (parseInt(process.env.INITIAL_SYNC_DELAY) || 2) * 60 * 1000,
-      enableRecovery: process.env.ENABLE_INVOICE_RECOVERY !== 'false', // Por defecto habilitado
-      recoveryBatchSize: parseInt(process.env.RECOVERY_BATCH_SIZE) || 10, // Procesar de a 10 facturas
-      enableAutoThirdPartyCreation: process.env.ENABLE_AUTO_THIRD_PARTY_CREATION !== 'false', // Por defecto habilitado
+      thirdPartiesInterval: (appConfig.get('third_parties_sync_interval', 30)) * 60 * 1000,
+      chartOfAccountsInterval: (appConfig.get('chart_of_accounts_sync_interval', 60)) * 60 * 1000,
+      productsInterval: (appConfig.get('products_sync_interval', 45)) * 60 * 1000,
+      initialDelay: (appConfig.get('initial_sync_delay', 2)) * 60 * 1000,
+      enableRecovery: appConfig.get('enable_invoice_recovery', true),
+      recoveryBatchSize: appConfig.get('recovery_batch_size', 10),
+      enableAutoThirdPartyCreation: appConfig.get('enable_auto_third_party_creation', true),
       // Configuración de sincronización de inventario
-      syncEA: process.env.SYNC_EA === 'true', // Sincronizar a Entradas de Almacén
-      syncOC: process.env.SYNC_OC === 'true', // Sincronizar a Órdenes de Compra
-      eaDocumentType: process.env.EA_DOCUMENT_TYPE || 'EAI',
-      ocDocumentType: process.env.OC_DOCUMENT_TYPE || 'OCI',
-      contabilizarEA: process.env.CONTABILIZAR_EA === 'true', // Contabilizar EA automáticamente
+      syncEA: appConfig.get('sync_ea', true),
+      syncOC: appConfig.get('sync_oc', false),
+      eaDocumentType: appConfig.get('ea_document_type', 'EAI'),
+      ocDocumentType: appConfig.get('oc_document_type', 'OCI'),
+      contabilizarEA: appConfig.get('contabilizar_ea', false),
     };
   }
 
@@ -718,13 +726,15 @@ class SyncService {
 
     // Validar NIT principal de la factura
     if (invoice.num_identificacion) {
-      let validNit = await this.findExistingThird(invoice.num_identificacion);
+      let validIdN = await this.findExistingThird(invoice.num_identificacion);
 
-      if (validNit) {
-        // Tercero encontrado, actualizar si es diferente
-        if (validNit !== invoice.num_identificacion) {
-          logger.info(`NIT principal corregido: ${invoice.num_identificacion} -> ${validNit}`);
-          invoice.num_identificacion = validNit;
+      if (validIdN) {
+        // Tercero encontrado en Firebird
+        // NO sobrescribir invoice.num_identificacion
+        // El NIT original debe mantenerse para Supabase
+        // El dataMapper.extractIdN() extraerá el ID_N cuando sea necesario para CARPROEN
+        if (validIdN !== invoice.num_identificacion) {
+          logger.info(`Tercero encontrado en Firebird: NIT original=${invoice.num_identificacion}, ID_N en Firebird=${validIdN}`);
         }
       } else {
         // Tercero NO encontrado
@@ -736,12 +746,16 @@ class SyncService {
 
           try {
             // Crear tercero en CUST y SHIPTO
-            const createdNit = await this.thirdPartyCreationService.createThirdPartyFromInvoice(invoiceData);
+            // El método createThirdPartyFromInvoice ya maneja correctamente:
+            // - ID_N en CUST: solo números (ej: 890399003)
+            // - NIT en CUST: formato completo (ej: 890399003-4)
+            const createdIdN = await this.thirdPartyCreationService.createThirdPartyFromInvoice(invoiceData);
 
-            // Usar el NIT creado
-            invoice.num_identificacion = createdNit;
+            // NO sobrescribir invoice.num_identificacion
+            // El NIT original debe mantenerse para Supabase
+            // El dataMapper.extractIdN() se encargará de extraer el ID_N cuando sea necesario
             thirdPartyCreated = true; // Marcar que se creó un tercero
-            logger.info(`✓ Tercero creado exitosamente: ${createdNit}`);
+            logger.info(`✓ Tercero creado exitosamente: ID_N=${createdIdN}, NIT original=${invoice.num_identificacion}`);
 
           } catch (creationError) {
             logger.error(`Error creando tercero automáticamente:`, creationError);
@@ -757,11 +771,14 @@ class SyncService {
     // Validar NITs en entradas contables
     for (const entry of entries) {
       if (entry.third_party_nit) {
-        const validNit = await this.findExistingThird(entry.third_party_nit);
-        if (validNit) {
-          if (validNit !== entry.third_party_nit) {
-            logger.info(`NIT de entrada contable corregido: ${entry.third_party_nit} -> ${validNit}`);
-            entry.third_party_nit = validNit;
+        const validIdN = await this.findExistingThird(entry.third_party_nit);
+        if (validIdN) {
+          // Tercero encontrado en Firebird
+          // NO sobrescribir entry.third_party_nit
+          // El NIT original debe mantenerse para Supabase
+          // El dataMapper.extractIdN() extraerá el ID_N cuando sea necesario para CARPRODE
+          if (validIdN !== entry.third_party_nit) {
+            logger.info(`Tercero de entrada contable encontrado: NIT original=${entry.third_party_nit}, ID_N en Firebird=${validIdN}`);
           }
         } else {
           // Si no se encuentra, usar el NIT principal de la factura
@@ -968,6 +985,9 @@ class SyncService {
    */
   async start() {
     try {
+      // Cargar configuración desde appConfig
+      this.loadConfig();
+
       await this.initialize();
 
       // Inicializar servicios de sincronización
