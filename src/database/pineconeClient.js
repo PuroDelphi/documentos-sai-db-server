@@ -1,4 +1,5 @@
 const { Pinecone } = require('@pinecone-database/pinecone');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
 
 /**
@@ -7,11 +8,11 @@ const logger = require('../utils/logger');
  */
 class PineconeClient {
   constructor() {
-    this.apiKey = process.env.PINECONE_API_KEY;
-    this.indexName = process.env.PINECONE_INDEX_NAME;
-    this.environment = process.env.PINECONE_ENVIRONMENT;
-    this.namespace = process.env.PINECONE_NAMESPACE || process.env.USER_UUID;
-    
+    this.apiKey = appConfig.get('pinecone_api_key', '');
+    this.indexName = appConfig.get('pinecone_index_name', '');
+    this.environment = appConfig.get('pinecone_environment', '');
+    this.namespace = appConfig.get('pinecone_namespace', '') || appConfig.getUserUUID();
+
     this.client = null;
     this.index = null;
     this.isConnected = false;

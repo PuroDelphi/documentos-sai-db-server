@@ -1,13 +1,13 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
-const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class ThirdPartySyncService {
   constructor() {
     this.firebirdClient = new FirebirdClient();
     this.supabaseClient = new SupabaseClient();
-    this.userUUID = validateAndGetUserUUID();
+    this.userUUID = appConfig.getUserUUID();
   }
 
   /**

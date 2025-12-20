@@ -70,6 +70,8 @@ typings/
 .env.test
 .env.local
 .env.production
+.env.encrypted
+.env.*
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -80,7 +82,10 @@ typings/
 
 # Nuxt.js build / generate output
 .nuxt
-dist
+
+# Build output
+dist/
+build/
 
 # Gatsby files
 .cache/

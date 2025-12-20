@@ -6,6 +6,7 @@ const ThirdPartySyncService = require('./thirdPartySyncService');
 const ThirdPartyCreationService = require('./thirdPartyCreationService');
 const ChartOfAccountsSyncService = require('./chartOfAccountsSyncService');
 const ProductSyncService = require('./productSyncService');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
 
 class SyncService {
@@ -26,21 +27,28 @@ class SyncService {
       products: null, // Intervalo para sincronización de productos
     };
 
-    // Configuración de tiempos (en milisegundos)
+    // Configuración de tiempos (se carga desde appConfig)
+    this.syncConfig = null;
+  }
+
+  /**
+   * Cargar configuración desde appConfig
+   */
+  loadConfig() {
     this.syncConfig = {
-      thirdPartiesInterval: (parseInt(process.env.THIRD_PARTIES_SYNC_INTERVAL) || 30) * 60 * 1000,
-      chartOfAccountsInterval: (parseInt(process.env.CHART_OF_ACCOUNTS_SYNC_INTERVAL) || 60) * 60 * 1000,
-      productsInterval: (parseInt(process.env.PRODUCTS_SYNC_INTERVAL) || 45) * 1000,
-      initialDelay: (parseInt(process.env.INITIAL_SYNC_DELAY) || 2) * 60 * 1000,
-      enableRecovery: process.env.ENABLE_INVOICE_RECOVERY !== 'false', // Por defecto habilitado
-      recoveryBatchSize: parseInt(process.env.RECOVERY_BATCH_SIZE) || 10, // Procesar de a 10 facturas
-      enableAutoThirdPartyCreation: process.env.ENABLE_AUTO_THIRD_PARTY_CREATION !== 'false', // Por defecto habilitado
+      thirdPartiesInterval: (appConfig.get('third_parties_sync_interval', 30)) * 60 * 1000,
+      chartOfAccountsInterval: (appConfig.get('chart_of_accounts_sync_interval', 60)) * 60 * 1000,
+      productsInterval: (appConfig.get('products_sync_interval', 45)) * 60 * 1000,
+      initialDelay: (appConfig.get('initial_sync_delay', 2)) * 60 * 1000,
+      enableRecovery: appConfig.get('enable_invoice_recovery', true),
+      recoveryBatchSize: appConfig.get('recovery_batch_size', 10),
+      enableAutoThirdPartyCreation: appConfig.get('enable_auto_third_party_creation', true),
       // Configuración de sincronización de inventario
-      syncEA: process.env.SYNC_EA === 'true', // Sincronizar a Entradas de Almacén
-      syncOC: process.env.SYNC_OC === 'true', // Sincronizar a Órdenes de Compra
-      eaDocumentType: process.env.EA_DOCUMENT_TYPE || 'EAI',
-      ocDocumentType: process.env.OC_DOCUMENT_TYPE || 'OCI',
-      contabilizarEA: process.env.CONTABILIZAR_EA === 'true', // Contabilizar EA automáticamente
+      syncEA: appConfig.get('sync_ea', true),
+      syncOC: appConfig.get('sync_oc', false),
+      eaDocumentType: appConfig.get('ea_document_type', 'EAI'),
+      ocDocumentType: appConfig.get('oc_document_type', 'OCI'),
+      contabilizarEA: appConfig.get('contabilizar_ea', false),
     };
   }
 
@@ -968,6 +976,9 @@ class SyncService {
    */
   async start() {
     try {
+      // Cargar configuración desde appConfig
+      this.loadConfig();
+
       await this.initialize();
 
       // Inicializar servicios de sincronización

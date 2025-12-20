@@ -1,0 +1,200 @@
+const { createClient } = require('@supabase/supabase-js');
+const ConfigCache = require('../utils/configCache');
+const logger = require('../utils/logger');
+
+/**
+ * Servicio de configuración centralizado
+ * Lee configuración desde Supabase y mantiene caché local encriptado
+ */
+class ConfigService {
+  constructor() {
+    this.cache = new ConfigCache();
+    this.config = null;
+    this.supabaseClient = null;
+    this.userId = null;
+    this.cachePassword = null;
+  }
+
+  /**
+   * Inicializar servicio de configuración
+   * @param {string} supabaseUrl - URL de Supabase
+   * @param {string} supabaseKey - API Key de Supabase
+   * @param {string} userId - UUID del usuario
+   * @param {string} cachePassword - Contraseña para encriptar caché local
+   */
+  async initialize(supabaseUrl, supabaseKey, userId, cachePassword) {
+    try {
+      this.supabaseClient = createClient(supabaseUrl, supabaseKey);
+      this.userId = userId;
+      this.cachePassword = cachePassword;
+
+      logger.info('🔧 Inicializando servicio de configuración...');
+
+      // Intentar cargar desde caché primero
+      const cachedConfig = this.cache.load(cachePassword);
+      
+      if (cachedConfig) {
+        this.config = cachedConfig;
+        logger.info('✅ Configuración cargada desde caché local');
+        
+        // Sincronizar en segundo plano
+        this.syncFromSupabase().catch(err => {
+          logger.warn('⚠️ Error sincronizando configuración desde Supabase:', err.message);
+        });
+      } else {
+        // No hay caché, cargar desde Supabase
+        await this.syncFromSupabase();
+      }
+
+      return this.config;
+    } catch (error) {
+      logger.error('❌ Error inicializando servicio de configuración:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sincronizar configuración desde Supabase
+   */
+  async syncFromSupabase() {
+    try {
+      logger.info('🔄 Sincronizando configuración desde Supabase...');
+
+      const { data, error } = await this.supabaseClient
+        .from('invoice_config')
+        .select('*')
+        .eq('user_id', this.userId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No existe configuración, crear una por defecto
+          logger.info('📝 No existe configuración, creando configuración por defecto...');
+          await this.createDefaultConfig();
+          return;
+        }
+        throw error;
+      }
+
+      this.config = data;
+      
+      // Guardar en caché
+      this.cache.save(data, this.cachePassword);
+      
+      logger.info('✅ Configuración sincronizada desde Supabase');
+    } catch (error) {
+      logger.error('❌ Error sincronizando desde Supabase:', error);
+      
+      // Si hay caché, usarlo como fallback
+      if (this.config) {
+        logger.warn('⚠️ Usando configuración en caché como fallback');
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Crear configuración por defecto en Supabase
+   */
+  async createDefaultConfig() {
+    try {
+      const defaultConfig = {
+        user_id: this.userId,
+        config_version: '1.0.0',
+        
+        // Sincronización
+        third_parties_sync_interval: 30,
+        chart_of_accounts_sync_interval: 60,
+        products_sync_interval: 45,
+        initial_sync_delay: 2,
+        
+        // Cuentas contables
+        account_sync_ranges: '1000-9999',
+        account_exclude_ranges: '',
+        sync_only_active_accounts: true,
+        exclude_zero_level_accounts: true,
+        
+        // Productos
+        sync_only_active_products: true,
+        sync_only_inventory_products: false,
+        exclude_product_groups: '',
+        include_product_groups: '',
+        
+        // Facturas
+        enable_invoice_recovery: true,
+        recovery_batch_size: 10,
+        enable_auto_third_party_creation: true,
+        use_invoice_number_for_invc: false,
+        
+        // Documentos
+        default_project_code: '',
+        default_activity_code: '',
+        document_type: 'FIA',
+        
+        // Inventario
+        sync_ea: true,
+        sync_oc: false,
+        ea_document_type: 'EAI',
+        oc_document_type: 'OCI',
+        contabilizar_ea: false,
+        
+        // Pinecone
+        pinecone_api_key: '',
+        pinecone_index_name: '',
+        pinecone_environment: '',
+        pinecone_namespace: '',
+        
+        // Embeddings
+        embeddings_api_url: 'https://chatbotstools.asistentesautonomos.com/api/embeddings',
+        embeddings_api_key: '',
+        embeddings_dimension: 512,
+        enable_pinecone_sync: true,
+        pinecone_sync_interval: 60,
+        pinecone_batch_size: 50,
+        
+        // Servicio
+        log_level: 'info',
+        service_name: 'supabase-firebird-sync',
+        api_port: null
+      };
+
+      const { data, error } = await this.supabaseClient
+        .from('invoice_config')
+        .insert(defaultConfig)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      this.config = data;
+      this.cache.save(data, this.cachePassword);
+
+      logger.info('✅ Configuración por defecto creada');
+    } catch (error) {
+      logger.error('❌ Error creando configuración por defecto:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener valor de configuración
+   */
+  get(key, defaultValue = null) {
+    if (!this.config) {
+      logger.warn(`⚠️ Configuración no inicializada, usando valor por defecto para ${key}`);
+      return defaultValue;
+    }
+    return this.config[key] !== undefined ? this.config[key] : defaultValue;
+  }
+
+  /**
+   * Obtener toda la configuración
+   */
+  getAll() {
+    return this.config;
+  }
+}
+
+module.exports = ConfigService;
+

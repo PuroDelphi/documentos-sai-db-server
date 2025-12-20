@@ -1,21 +1,28 @@
 const FirebirdClient = require('../database/firebirdClient');
 const SupabaseClient = require('../database/supabaseClient');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
-const { validateAndGetUserUUID } = require('../utils/userValidation');
 
 class ProductSyncService {
   constructor() {
     this.firebirdClient = new FirebirdClient();
     this.supabaseClient = new SupabaseClient();
-    this.userUUID = validateAndGetUserUUID();
-    
-    // Configuración de sincronización
+    this.userUUID = appConfig.getUserUUID();
+
+    // Configuración de sincronización (se carga en initialize)
+    this.syncConfig = null;
+  }
+
+  /**
+   * Cargar configuración desde appConfig
+   */
+  loadConfig() {
     this.syncConfig = {
-      // Filtros configurables por variables de entorno
-      onlyActiveProducts: process.env.SYNC_ONLY_ACTIVE_PRODUCTS !== 'false', // true por defecto
-      onlyInventoryProducts: process.env.SYNC_ONLY_INVENTORY_PRODUCTS === 'true', // false por defecto
-      excludeGroups: this.parseExcludeGroups(process.env.EXCLUDE_PRODUCT_GROUPS || ''),
-      includeGroups: this.parseIncludeGroups(process.env.INCLUDE_PRODUCT_GROUPS || ''),
+      // Filtros configurables desde Supabase
+      onlyActiveProducts: appConfig.get('sync_only_active_products', true),
+      onlyInventoryProducts: appConfig.get('sync_only_inventory_products', false),
+      excludeGroups: this.parseExcludeGroups(appConfig.get('exclude_product_groups', '')),
+      includeGroups: this.parseIncludeGroups(appConfig.get('include_product_groups', '')),
     };
   }
 
@@ -52,6 +59,9 @@ class ProductSyncService {
    */
   async initialize() {
     try {
+      // Cargar configuración
+      this.loadConfig();
+
       await this.firebirdClient.initialize();
       logger.info('Servicio de sincronización de productos inicializado');
       logger.info('Configuración de sincronización:', this.syncConfig);

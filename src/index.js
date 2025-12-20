@@ -1,6 +1,6 @@
+const appConfig = require('./config/appConfig');
 const SyncService = require('./services/syncService');
 const logger = require('./utils/logger');
-const { validateAndGetUserUUID } = require('./utils/userValidation');
 
 // Importar Express solo si se necesita
 let express = null;
@@ -20,7 +20,7 @@ if (!fs.existsSync('logs')) {
   fs.mkdirSync('logs');
 }
 
-const syncService = new SyncService();
+let syncService = null;
 
 // Manejo de señales del sistema
 process.on('SIGINT', async () => {
@@ -51,13 +51,17 @@ async function main() {
   try {
     logger.info('Iniciando servicio de sincronización Supabase-Firebird...');
 
-    // Validar configuración de usuario (obligatorio)
-    validateAndGetUserUUID();
+    // Inicializar configuración de la aplicación
+    await appConfig.initialize();
+
+    // Crear instancia del servicio de sincronización
+    const SyncService = require('./services/syncService');
+    syncService = new SyncService();
 
     await syncService.start();
 
     // Iniciar servidor API opcional (solo si se especifica puerto y Express está disponible)
-    const apiPort = process.env.API_PORT;
+    const apiPort = appConfig.get('api_port');
     if (apiPort && express && createSyncEndpoints) {
       const app = express();
       app.use(express.json());

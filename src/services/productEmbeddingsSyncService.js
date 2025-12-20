@@ -1,6 +1,7 @@
 const PineconeClient = require('../database/pineconeClient');
 const EmbeddingsService = require('./embeddingsService');
 const SupabaseClient = require('../database/supabaseClient');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
 
 /**
@@ -12,8 +13,8 @@ class ProductEmbeddingsSyncService {
     this.pineconeClient = new PineconeClient();
     this.embeddingsService = new EmbeddingsService();
     this.supabaseClient = new SupabaseClient();
-    this.userUUID = process.env.USER_UUID;
-    this.batchSize = parseInt(process.env.PINECONE_BATCH_SIZE || '50', 10);
+    this.userUUID = appConfig.getUserUUID();
+    this.batchSize = appConfig.get('pinecone_batch_size', 50);
     this.isRunning = false;
   }
 

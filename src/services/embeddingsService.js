@@ -1,4 +1,5 @@
 const axios = require('axios');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
 
 /**
@@ -6,9 +7,9 @@ const logger = require('../utils/logger');
  */
 class EmbeddingsService {
   constructor() {
-    this.apiUrl = process.env.EMBEDDINGS_API_URL || 'https://chatbotstools.asistentesautonomos.com/api/embeddings';
-    this.apiKey = process.env.EMBEDDINGS_API_KEY;
-    this.dimension = parseInt(process.env.EMBEDDINGS_DIMENSION || '512', 10);
+    this.apiUrl = appConfig.get('embeddings_api_url', 'https://chatbotstools.asistentesautonomos.com/api/embeddings');
+    this.apiKey = appConfig.get('embeddings_api_key', '');
+    this.dimension = appConfig.get('embeddings_dimension', 512);
   }
 
   /**
@@ -16,7 +17,7 @@ class EmbeddingsService {
    */
   validateConfig() {
     if (!this.apiKey) {
-      throw new Error('EMBEDDINGS_API_KEY no está configurado');
+      throw new Error('embeddings_api_key no está configurado en invoice_config');
     }
   }
 
