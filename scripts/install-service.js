@@ -55,14 +55,16 @@ async function main() {
     console.log(`  Script: ${scriptPath}`);
     console.log();
 
-    // Solicitar contraseña del .env si existe archivo encriptado
+    // Solicitar contraseñas si existe archivo encriptado
     const encryptedEnvPath = path.join(process.cwd(), '.env.encrypted');
     let envPassword = '';
+    let configCachePassword = '';
 
     if (fs.existsSync(encryptedEnvPath)) {
       console.log('🔐 Archivo .env.encrypted detectado');
+      console.log();
       envPassword = await question('Ingresa la contraseña del archivo .env: ');
-      
+
       if (!envPassword) {
         console.error('❌ La contraseña es requerida para usar .env.encrypted');
         process.exit(1);
@@ -70,8 +72,20 @@ async function main() {
       console.log();
     }
 
+    // Solicitar contraseña para el caché de configuración
+    console.log('🔐 Configuración del caché de configuración');
+    console.log('   (Se usa para encriptar la configuración local desde Supabase)');
+    console.log();
+    configCachePassword = await question('Ingresa la contraseña para el caché de configuración: ');
+
+    if (!configCachePassword) {
+      console.error('❌ La contraseña del caché de configuración es requerida');
+      process.exit(1);
+    }
+    console.log();
+
     const confirm = await question('¿Deseas continuar con la instalación? (s/n): ');
-    
+
     if (confirm.toLowerCase() !== 's' && confirm.toLowerCase() !== 'si') {
       console.log('❌ Instalación cancelada');
       process.exit(0);
@@ -81,18 +95,30 @@ async function main() {
     console.log('📦 Instalando servicio...');
     console.log();
 
+    // Preparar variables de entorno para el servicio
+    const envVars = [];
+
+    if (envPassword) {
+      envVars.push({
+        name: 'ENV_PASSWORD',
+        value: envPassword
+      });
+    }
+
+    if (configCachePassword) {
+      envVars.push({
+        name: 'CONFIG_CACHE_PASSWORD',
+        value: configCachePassword
+      });
+    }
+
     // Crear servicio
     const svc = new Service({
       name: serviceName,
       description: serviceDescription,
       script: scriptPath,
       nodeOptions: [],
-      env: envPassword ? [
-        {
-          name: 'ENV_PASSWORD',
-          value: envPassword
-        }
-      ] : []
+      env: envVars
     });
 
     // Evento de instalación
