@@ -85,32 +85,63 @@ class ThirdPartySyncService {
         return { processed: 0, errors: 0 };
       }
 
-      // Procesar registros en lotes
-      const batchSize = 10;
+      // Procesar registros en lotes con batch upsert (optimizado)
+      const batchSize = 100; // Aumentado de 10 a 100 para mejor rendimiento
       let processed = 0;
       let errors = 0;
 
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
-        logger.info(`Procesando lote ${Math.floor(i / batchSize) + 1} de ${Math.ceil(records.length / batchSize)}`);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(records.length / batchSize);
 
-        for (const record of batch) {
-          try {
-            await this.upsertThirdParty(record);
-            processed++;
-          } catch (error) {
-            logger.error(`Error procesando tercero ${record.ID_N}:`, error);
-            errors++;
+        logger.info(`Procesando lote ${batchNumber} de ${totalBatches} (${batch.length} registros)`);
+
+        try {
+          // Mapear todos los registros del batch
+          const mappedRecords = batch.map(record => ({
+            ...this.mapCustToSupabase(record),
+            user_id: this.userUUID,
+            last_sync_at: new Date().toISOString(),
+            sync_status: 'SYNCED',
+            sync_error: null
+          }));
+
+          // Batch upsert - mucho más rápido que uno por uno
+          const { error } = await this.supabaseClient.client
+            .from('invoice_third_parties')
+            .upsert(mappedRecords, {
+              onConflict: 'id_n,user_id',
+              ignoreDuplicates: false
+            });
+
+          if (error) throw error;
+
+          processed += batch.length;
+          logger.info(`✅ Lote ${batchNumber} procesado exitosamente: ${batch.length} terceros`);
+
+        } catch (error) {
+          logger.error(`❌ Error en lote ${batchNumber}, procesando registros individualmente:`, error.message);
+
+          // Fallback: procesar uno por uno para identificar registros problemáticos
+          for (const record of batch) {
+            try {
+              await this.upsertThirdParty(record);
+              processed++;
+            } catch (err) {
+              logger.error(`Error procesando tercero ${record.ID_N}:`, err.message);
+              errors++;
+            }
           }
         }
 
         // Pausa pequeña entre lotes para no sobrecargar
         if (i + batchSize < records.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reducido de 100ms a 50ms
         }
       }
 
-      logger.info(`Sincronización completada: ${processed} procesados, ${errors} errores`);
+      logger.info(`✅ Sincronización completada: ${processed} procesados, ${errors} errores`);
       return { processed, errors };
 
     } catch (error) {
