@@ -102,49 +102,56 @@ class ConfigService {
       const defaultConfig = {
         user_id: this.userId,
         config_version: '1.0.0',
-        
+
+        // Configuración de Firebird
+        firebird_host: 'localhost',
+        firebird_port: 3050,
+        firebird_database: '',
+        firebird_user: 'SYSDBA',
+        firebird_password: '',
+
         // Sincronización
         third_parties_sync_interval: 30,
         chart_of_accounts_sync_interval: 60,
         products_sync_interval: 45,
         initial_sync_delay: 2,
-        
+
         // Cuentas contables
         account_sync_ranges: '1000-9999',
         account_exclude_ranges: '',
         sync_only_active_accounts: true,
         exclude_zero_level_accounts: true,
-        
+
         // Productos
         sync_only_active_products: true,
         sync_only_inventory_products: false,
         exclude_product_groups: '',
         include_product_groups: '',
-        
+
         // Facturas
         enable_invoice_recovery: true,
         recovery_batch_size: 10,
         enable_auto_third_party_creation: true,
         use_invoice_number_for_invc: false,
-        
+
         // Documentos
         default_project_code: '',
         default_activity_code: '',
         document_type: 'FIA',
-        
+
         // Inventario
         sync_ea: true,
         sync_oc: false,
         ea_document_type: 'EAI',
         oc_document_type: 'OCI',
         contabilizar_ea: false,
-        
+
         // Pinecone
         pinecone_api_key: '',
         pinecone_index_name: '',
         pinecone_environment: '',
         pinecone_namespace: '',
-        
+
         // Embeddings
         embeddings_api_url: 'https://chatbotstools.asistentesautonomos.com/api/embeddings',
         embeddings_api_key: '',
@@ -152,7 +159,7 @@ class ConfigService {
         enable_pinecone_sync: true,
         pinecone_sync_interval: 60,
         pinecone_batch_size: 50,
-        
+
         // Servicio
         log_level: 'info',
         service_name: 'supabase-firebird-sync',

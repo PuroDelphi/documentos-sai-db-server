@@ -1,5 +1,5 @@
 const Firebird = require('node-firebird');
-const config = require('../config');
+const appConfig = require('../config/appConfig');
 const logger = require('../utils/logger');
 
 class FirebirdClient {
@@ -10,19 +10,35 @@ class FirebirdClient {
 
   /**
    * Inicializa el pool de conexiones de Firebird
+   * Usa credenciales desde Supabase (vía appConfig)
    */
   async initialize() {
     return new Promise((resolve, reject) => {
-      Firebird.attach(config.firebird, (err, db) => {
+      // Obtener credenciales desde Supabase (vía appConfig)
+      const firebirdConfig = appConfig.getFirebirdCredentials();
+
+      // Validar que la base de datos esté configurada
+      if (!firebirdConfig.database) {
+        const error = new Error('La ruta de la base de datos Firebird no está configurada en Supabase (invoice_config.firebird_database)');
+        logger.error(error.message);
+        reject(error);
+        return;
+      }
+
+      logger.info(`Conectando a Firebird: ${firebirdConfig.database}`);
+
+      Firebird.attach(firebirdConfig, (err, db) => {
         if (err) {
           logger.error('Error conectando a Firebird:', err);
           reject(err);
           return;
         }
-        
+
         this.pool = db;
         this.isConnected = true;
-        logger.info('Conexión a Firebird establecida exitosamente');
+        logger.info('✅ Conexión a Firebird establecida exitosamente');
+        logger.info(`   Base de datos: ${firebirdConfig.database}`);
+        logger.info(`   Host: ${firebirdConfig.host}:${firebirdConfig.port}`);
         resolve();
       });
     });

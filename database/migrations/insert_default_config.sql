@@ -21,7 +21,14 @@ BEGIN
   INSERT INTO invoice_config (
     user_id,
     config_version,
-    
+
+    -- Configuración de Firebird
+    firebird_host,
+    firebird_port,
+    firebird_database,
+    firebird_user,
+    firebird_password,
+
     -- Sincronización de terceros
     third_parties_sync_interval,
     
@@ -89,7 +96,14 @@ BEGIN
   ) VALUES (
     v_user_uuid,
     '1.0.0',
-    
+
+    -- Configuración de Firebird (DEBE SER CONFIGURADO POR EL USUARIO)
+    'localhost', -- firebird_host
+    3050, -- firebird_port
+    '', -- firebird_database (VACÍO - debe configurarse desde la web)
+    'SYSDBA', -- firebird_user
+    '', -- firebird_password (VACÍO - debe configurarse desde la web)
+
     -- Sincronización de terceros (cada 30 minutos)
     30,
     

@@ -40,21 +40,14 @@ El servicio utiliza un sistema de **configuración centralizada** que separa las
 
 ---
 
-## 🔐 Archivo .env (Credenciales)
+## 🔐 Archivo .env (Credenciales Mínimas)
 
-El archivo `.env` contiene **SOLO credenciales sensibles**:
+El archivo `.env` contiene **SOLO credenciales de Supabase y configuración del usuario**:
 
 ```env
 # Credenciales de Supabase
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_ANON_KEY=tu_anon_key_aqui
-
-# Credenciales de Firebird
-FIREBIRD_HOST=localhost
-FIREBIRD_PORT=3050
-FIREBIRD_DATABASE=C:/path/to/database.fdb
-FIREBIRD_USER=SYSDBA
-FIREBIRD_PASSWORD=tu_password_aqui
 
 # Usuario del servicio
 USER_UUID=uuid-del-usuario-en-invoice_user
@@ -62,6 +55,23 @@ USER_UUID=uuid-del-usuario-en-invoice_user
 # Contraseña para encriptar caché de configuración
 CONFIG_CACHE_PASSWORD=password_seguro_para_cache
 ```
+
+**IMPORTANTE:** Las credenciales de Firebird **YA NO van en el .env**. Se configuran desde la interfaz web y se almacenan en Supabase (`invoice_config` tabla).
+
+### Credenciales de Firebird (Opcional - Solo Desarrollo)
+
+Para desarrollo/pruebas locales, puedes agregar credenciales de Firebird al `.env`:
+
+```env
+# OPCIONAL: Solo para desarrollo/pruebas
+FIREBIRD_HOST=localhost
+FIREBIRD_PORT=3050
+FIREBIRD_DATABASE=C:/path/to/database.fdb
+FIREBIRD_USER=SYSDBA
+FIREBIRD_PASSWORD=tu_password_aqui
+```
+
+**Nota:** En producción, estas credenciales se ignoran y se usan las de Supabase.
 
 ### Encriptar el .env
 
@@ -89,6 +99,20 @@ psql -h db.tu-proyecto.supabase.co -U postgres -d postgres -f database/migration
 O ejecutar el SQL directamente en el SQL Editor de Supabase.
 
 ### Configuraciones disponibles
+
+#### 🔌 Credenciales de Firebird
+
+| Campo | Tipo | Default | Descripción |
+|-------|------|---------|-------------|
+| `firebird_host` | TEXT | 'localhost' | Host del servidor Firebird |
+| `firebird_port` | INTEGER | 3050 | Puerto del servidor Firebird |
+| `firebird_database` | TEXT | '' | Ruta completa a la base de datos |
+| `firebird_user` | TEXT | 'SYSDBA' | Usuario de Firebird |
+| `firebird_password` | TEXT | '' | Contraseña de Firebird |
+
+**IMPORTANTE:** Estas credenciales se configuran desde la interfaz web del cliente y se almacenan encriptadas en Supabase.
+
+#### ⏱️ Intervalos de Sincronización
 
 | Campo | Tipo | Default | Descripción |
 |-------|------|---------|-------------|

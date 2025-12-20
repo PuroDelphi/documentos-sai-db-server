@@ -52,10 +52,25 @@ class AppConfig {
   }
 
   /**
-   * Obtener credenciales de Firebird
+   * Obtener credenciales de Firebird desde Supabase
+   * (en lugar de desde .env)
    */
   getFirebirdCredentials() {
-    return credentials.firebird;
+    if (!this.initialized) {
+      throw new Error('AppConfig no ha sido inicializado. Llama a initialize() primero.');
+    }
+
+    // Leer desde configuración de Supabase
+    return {
+      host: this.configService.get('firebird_host', 'localhost'),
+      port: this.configService.get('firebird_port', 3050),
+      database: this.configService.get('firebird_database', ''),
+      user: this.configService.get('firebird_user', 'SYSDBA'),
+      password: this.configService.get('firebird_password', ''),
+      lowercase_keys: false,
+      role: null,
+      pageSize: 4096
+    };
   }
 
   /**

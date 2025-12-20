@@ -6,12 +6,19 @@
 -- Crear tabla de configuración
 CREATE TABLE IF NOT EXISTS invoice_config (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES invoice_user(id) ON DELETE CASCADE,
-  
+  user_id UUID NOT NULL REFERENCES invoice_users(id) ON DELETE CASCADE,
+
   -- Metadatos
   config_version VARCHAR(20) NOT NULL DEFAULT '1.0.0',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  -- Configuración de Firebird (credenciales del cliente)
+  firebird_host TEXT DEFAULT 'localhost',
+  firebird_port INTEGER DEFAULT 3050,
+  firebird_database TEXT DEFAULT '',
+  firebird_user TEXT DEFAULT 'SYSDBA',
+  firebird_password TEXT DEFAULT '',
   
   -- Configuración de sincronización de terceros
   third_parties_sync_interval INTEGER DEFAULT 30, -- minutos
