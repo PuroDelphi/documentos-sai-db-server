@@ -8,6 +8,7 @@ require('dotenv').config();
 const FirebirdClient = require('../database/firebirdClient');
 const ThirdPartyCreationService = require('../services/thirdPartyCreationService');
 const logger = require('../utils/logger');
+const { initAppConfig } = require('./helpers/initAppConfig');
 
 async function testThirdPartyCreation() {
   const firebirdClient = new FirebirdClient();
@@ -17,6 +18,9 @@ async function testThirdPartyCreation() {
     logger.info('='.repeat(80));
     logger.info('PRUEBA DE CREACIÓN AUTOMÁTICA DE TERCEROS');
     logger.info('='.repeat(80));
+
+    // Inicializar configuración de la aplicación
+    await initAppConfig();
 
     // Inicializar conexión
     await firebirdClient.initialize();

@@ -8,6 +8,7 @@ const FirebirdClient = require('../database/firebirdClient');
 const InventoryMapper = require('../services/inventoryMapper');
 const ThirdPartyCreationService = require('../services/thirdPartyCreationService');
 const logger = require('../utils/logger');
+const { initAppConfig } = require('./helpers/initAppConfig');
 
 async function testDirectFirebirdInventory() {
   const firebirdClient = new FirebirdClient();
@@ -16,6 +17,9 @@ async function testDirectFirebirdInventory() {
 
   try {
     logger.info('=== PRUEBA DE INSERCIÓN DIRECTA EN FIREBIRD (IP/IPDET/ITEMACT) ===');
+
+    // Inicializar configuración de la aplicación
+    await initAppConfig();
 
     // Conectar a Firebird
     await firebirdClient.initialize();
