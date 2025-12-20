@@ -34,6 +34,11 @@ class AppConfig {
         credentials.cache.password
       );
 
+      // Actualizar configuración del logger con valores de Supabase
+      const logLevel = this.configService.get('log_level', 'info');
+      const serviceName = this.configService.get('service_name', 'supabase-firebird-sync');
+      logger.updateConfig(logLevel, serviceName);
+
       this.initialized = true;
       logger.info('✅ Configuración de la aplicación inicializada');
 
