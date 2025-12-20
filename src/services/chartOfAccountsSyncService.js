@@ -396,30 +396,54 @@ class ChartOfAccountsSyncService {
    */
   async getSyncStats() {
     try {
+      // Obtener todos los registros del usuario (solo sync_status para eficiencia)
       const { data, error } = await this.supabaseClient.client
         .from('invoice_chart_of_accounts')
-        .select('sync_status, count(*)')
-        .eq('user_id', this.userUUID)
-        .group('sync_status');
+        .select('sync_status')
+        .eq('user_id', this.userUUID);
 
       if (error) throw error;
 
+      // Contar por estado en JavaScript
       const stats = {
-        total: 0,
+        total: data.length,
         synced: 0,
         pending: 0,
-        error: 0
+        error: 0,
+        lastSync: null
       };
 
       data.forEach(row => {
-        stats.total += row.count;
-        stats[row.sync_status.toLowerCase()] = row.count;
+        const status = (row.sync_status || 'pending').toLowerCase();
+        if (stats.hasOwnProperty(status)) {
+          stats[status]++;
+        }
       });
+
+      // Obtener fecha de última sincronización
+      const { data: lastSyncData } = await this.supabaseClient.client
+        .from('invoice_chart_of_accounts')
+        .select('last_sync_at')
+        .eq('user_id', this.userUUID)
+        .not('last_sync_at', 'is', null)
+        .order('last_sync_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastSyncData) {
+        stats.lastSync = lastSyncData.last_sync_at;
+      }
 
       return stats;
     } catch (error) {
       logger.error('Error obteniendo estadísticas de cuentas:', error);
-      return null;
+      return {
+        total: 0,
+        synced: 0,
+        pending: 0,
+        error: 0,
+        lastSync: null
+      };
     }
   }
 
