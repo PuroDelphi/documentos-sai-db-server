@@ -42,6 +42,7 @@
     "test-auto-match-service": "node src/scripts/testAutoMatchService.js",
     "test-auto-match-full": "node src/scripts/testAutoMatchWithSync.js",
     "test-learning": "node src/scripts/testLearningSystem.js",
+    "verify-auto-match": "node src/scripts/verifyAndFixAutoMatch.js",
     "build": "pkg . --targets node18-win-x64 --output dist/supabase-firebird-sync.exe",
     "build:all": "pkg . --targets node18-win-x64,node18-linux-x64 --out-path dist",
     "build:installers": "pkg scripts/install-service.js --targets node18-win-x64 --output dist/install-service.exe && pkg scripts/uninstall-service.js --targets node18-win-x64 --output dist/uninstall-service.exe && pkg scripts/encrypt-env.js --targets node18-win-x64 --output dist/encrypt-env.exe",

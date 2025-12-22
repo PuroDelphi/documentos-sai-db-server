@@ -1,12 +1,13 @@
 -- ============================================================================
--- ACTUALIZACIÓN: Auto-emparejamiento para facturas de INVENTARIO y SERVICIO
+-- ACTUALIZACIÓN: Auto-emparejamiento para TODOS los tipos de factura
 -- ============================================================================
--- 
+--
 -- CAMBIO: Modificar el trigger de auto-emparejamiento para que funcione
--- tanto en facturas de tipo "inventario" como de tipo "servicio"
+-- con TODOS los tipos de factura (inventario, servicio, libre)
 --
 -- ANTES: Solo funcionaba con invoice_type = 'inventario'
--- AHORA: Funciona con invoice_type IN ('inventario', 'servicio')
+-- DESPUÉS: Funcionaba con invoice_type IN ('inventario', 'servicio')
+-- AHORA: Funciona con TODOS los tipos (sin validación de tipo)
 --
 -- Fecha: 2025-12-22
 -- ============================================================================
@@ -25,13 +26,12 @@ DROP FUNCTION IF EXISTS auto_match_product_id();
 -- 1. APRENDIZAJE: Busca en invoice_items del mismo usuario con la misma descripción
 -- 2. SIMILITUD: Busca en invoice_products por similitud de texto (trigram)
 --
--- MODIFICACIÓN: Ahora funciona con invoice_type IN ('inventario', 'servicio')
+-- MODIFICACIÓN: Ahora funciona con TODOS los tipos de factura (sin validación)
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION auto_match_product_id()
 RETURNS TRIGGER AS $$
 DECLARE
-  v_invoice_type TEXT;
   v_learned_product_id UUID;
   v_similar_product_id UUID;
   v_similar_product_code TEXT;
@@ -40,17 +40,6 @@ DECLARE
 BEGIN
   -- Solo procesar si product_id es NULL y hay descripción
   IF NEW.product_id IS NOT NULL OR NEW.description IS NULL OR TRIM(NEW.description) = '' THEN
-    RETURN NEW;
-  END IF;
-
-  -- Obtener el tipo de factura
-  SELECT invoice_type INTO v_invoice_type
-  FROM invoices
-  WHERE id = NEW.invoice_id;
-
-  -- MODIFICACIÓN: Ahora funciona con 'inventario' Y 'servicio'
-  IF v_invoice_type NOT IN ('inventario', 'servicio') THEN
-    -- No auto-emparejar para otros tipos de factura
     RETURN NEW;
   END IF;
 
@@ -98,8 +87,8 @@ BEGIN
   END IF;
 
   -- No se encontró ningún match
-  RAISE WARNING 'NO MATCH: item_id=%, description="%", invoice_type=%',
-    NEW.id, NEW.description, v_invoice_type;
+  RAISE WARNING 'NO MATCH: item_id=%, description="%"',
+    NEW.id, NEW.description;
 
   RETURN NEW;
 END;
@@ -129,9 +118,9 @@ CREATE TRIGGER trigger_auto_match_product_id_on_update
 -- COMENTARIOS
 -- ============================================================================
 
-COMMENT ON FUNCTION auto_match_product_id() IS 
-'Auto-empareja product_id en invoice_items basándose en aprendizaje y similitud. 
-Funciona con facturas de tipo "inventario" y "servicio".
+COMMENT ON FUNCTION auto_match_product_id() IS
+'Auto-empareja product_id en invoice_items basándose en aprendizaje y similitud.
+Funciona con TODOS los tipos de factura (inventario, servicio, libre).
 Paso 1: Busca en invoice_items del mismo usuario con la misma descripción (aprendizaje).
 Paso 2: Busca en invoice_products por similitud de texto usando pg_trgm (threshold 0.3).';
 
