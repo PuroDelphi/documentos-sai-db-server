@@ -648,6 +648,13 @@ class SyncService {
       const ipDefaults = await this.inventoryMapper.getDefaultValuesForIP();
       const ipdetDefaults = await this.inventoryMapper.getDefaultValuesForIPDET();
 
+      // ✅ CRÍTICO: Asegurar que E y S sean iguales en IP e IPDET
+      // La clave foránea FK_IPDET_IP requiere que (NUMBER, TIPO, E, S) coincidan
+      ipdetDefaults.E = ipDefaults.E;
+      ipdetDefaults.S = ipDefaults.S;
+
+      logger.info(`Usando E=${ipDefaults.E}, S=${ipDefaults.S} para IP e IPDET`);
+
       // Mapear datos a IP (encabezado)
       const ipData = await this.inventoryMapper.mapToIP(
         invoice,
