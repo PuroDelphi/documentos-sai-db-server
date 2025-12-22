@@ -32,8 +32,8 @@ DROP FUNCTION IF EXISTS auto_match_product_id();
 CREATE OR REPLACE FUNCTION auto_match_product_id()
 RETURNS TRIGGER AS $$
 DECLARE
-  v_learned_product_id UUID;
-  v_similar_product_id UUID;
+  v_learned_product_id BIGINT;
+  v_similar_product_id BIGINT;
   v_similar_product_code TEXT;
   v_similar_product_desc TEXT;
   v_similarity_score NUMERIC;
