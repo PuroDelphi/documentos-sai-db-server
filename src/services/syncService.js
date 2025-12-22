@@ -384,6 +384,61 @@ class SyncService {
   }
 
   /**
+   * Valida que todas las cuentas contables existan en Firebird
+   * @param {Array} carprodeData - Array de entradas contables
+   * @param {string} invoiceId - ID de la factura en Supabase
+   * @throws {Error} Si alguna cuenta no existe
+   */
+  async validateAccountCodes(carprodeData, invoiceId) {
+    try {
+      // Extraer códigos de cuenta únicos
+      const accountCodes = [...new Set(carprodeData.map(entry => entry.ACCT))];
+
+      logger.info(`Validando ${accountCodes.length} cuentas contables únicas...`);
+
+      // Verificar cada cuenta en Firebird
+      const invalidAccounts = [];
+
+      for (const accountCode of accountCodes) {
+        const result = await this.firebirdClient.query(`
+          SELECT COUNT(*) as CUENTA_EXISTE
+          FROM ACCT
+          WHERE ACCT = ?
+        `, [accountCode]);
+
+        if (result[0]?.CUENTA_EXISTE === 0) {
+          invalidAccounts.push(accountCode);
+        }
+      }
+
+      // Si hay cuentas inválidas, lanzar error
+      if (invalidAccounts.length > 0) {
+        const errorMessage = `Las siguientes cuentas contables no existen en Firebird: ${invalidAccounts.join(', ')}. Por favor, sincronice las cuentas contables o verifique los códigos de cuenta en la factura.`;
+
+        logger.error(errorMessage);
+
+        // Actualizar estado en Supabase con error específico
+        await this.supabaseClient.updateInvoiceStatus(
+          invoiceId,
+          'ERROR',
+          errorMessage
+        );
+
+        throw new Error(errorMessage);
+      }
+
+      logger.info(`✅ Todas las cuentas contables son válidas`);
+    } catch (error) {
+      if (error.message.includes('no existen en Firebird')) {
+        throw error; // Re-lanzar error de validación
+      }
+
+      logger.error('Error validando cuentas contables:', error);
+      throw new Error(`Error validando cuentas contables: ${error.message}`);
+    }
+  }
+
+  /**
    * Actualiza el consecutivo en TIPDOC incrementándolo en 1
    */
   async updateConsecutive(usedBatch) {
@@ -519,6 +574,9 @@ class SyncService {
     // Mapear datos con NITs validados
     const carproenData = this.dataMapper.mapToCarproen(validatedInvoiceData, batch);
     const carprodeData = this.dataMapper.mapToCarprode(validatedInvoiceData, batch);
+
+    // VALIDAR CUENTAS CONTABLES ANTES DE INSERTAR
+    await this.validateAccountCodes(carprodeData, validatedInvoiceData.invoice.id);
 
     // Ejecutar inserción en transacción
     await this.firebirdClient.transaction(async (transaction) => {
