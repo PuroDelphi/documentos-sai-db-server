@@ -39,6 +39,7 @@
     "test-direct-firebird": "node src/scripts/testDirectFirebirdInventory.js",
     "test-inventory-products": "node src/scripts/testInventoryWithProducts.js",
     "test-auto-match": "node src/scripts/testAutoMatchProducts.js",
+    "test-auto-match-service": "node src/scripts/testAutoMatchService.js",
     "test-auto-match-full": "node src/scripts/testAutoMatchWithSync.js",
     "test-learning": "node src/scripts/testLearningSystem.js",
     "build": "pkg . --targets node18-win-x64 --output dist/supabase-firebird-sync.exe",

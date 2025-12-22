@@ -60,7 +60,7 @@ El sistema **aprende de las correcciones del usuario** y las recuerda para futur
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │ 2. TRIGGER: auto_match_product_id()                         │
-│    - Verifica que invoice_type = 'inventario'               │
+│    - Verifica que invoice_type IN ('inventario', 'servicio')│
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -115,15 +115,17 @@ SELECT ... FROM find_similar_product(NEW.description, NEW.user_id, 0.3) fp;
 
 ## 📊 Tipos de Factura Soportados
 
-El auto-emparejamiento **SOLO** se aplica a facturas de tipo inventario:
+El auto-emparejamiento se aplica a facturas de tipo **inventario** y **servicio**:
 
 - ✅ **"inventario"** - Facturas de inventario (EA, OC en Firebird)
-- ❌ **"servicio"** - Facturas de servicio - NO se auto-empareja
+- ✅ **"servicio"** - Facturas de servicio (FIA en Firebird) - **ACTUALIZADO 2025-12-22**
 - ❌ **"libre"** - Facturas libres - NO se auto-empareja
 
 **Nota:** En Supabase los tipos son diferentes a Firebird:
 - Supabase: `"inventario"`, `"servicio"`, `"libre"`
 - Firebird: `EA`, `OC`, `FIA`
+
+**Cambio reciente:** Antes solo funcionaba con `"inventario"`, ahora también funciona con `"servicio"` para permitir auto-emparejamiento en facturas de servicios que incluyen productos.
 
 ---
 
