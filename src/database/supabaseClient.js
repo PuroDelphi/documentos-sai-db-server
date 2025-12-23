@@ -74,12 +74,14 @@ class SupabaseClient {
   /**
    * Configura el listener de cambios en tiempo real con reconexión automática
    * @param {Function} callback - Función a ejecutar cuando hay cambios
+   * @param {Function} onReconnect - Función a ejecutar cuando se reconecta exitosamente (opcional)
    */
-  setupRealtimeListener(callback) {
+  setupRealtimeListener(callback, onReconnect = null) {
     let channel = null;
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 10;
     const reconnectDelay = 5000; // 5 segundos
+    let isFirstConnection = true; // Flag para detectar reconexiones
 
     const createChannel = () => {
       // Desuscribir del canal anterior si existe
@@ -182,6 +184,22 @@ class SupabaseClient {
 
           if (status === 'SUBSCRIBED') {
             logger.info('✅ Listener de Supabase Realtime SUSCRITO exitosamente');
+
+            // Si es una reconexión (no la primera conexión), ejecutar callback de recuperación
+            if (!isFirstConnection && onReconnect) {
+              logger.info('🔄 Reconexión detectada, ejecutando recuperación de facturas pendientes...');
+              // Ejecutar en background para no bloquear la suscripción
+              setImmediate(async () => {
+                try {
+                  await onReconnect();
+                  logger.info('✅ Recuperación post-reconexión completada');
+                } catch (error) {
+                  logger.error('❌ Error en recuperación post-reconexión:', error.message);
+                }
+              });
+            }
+
+            isFirstConnection = false; // Marcar que ya no es la primera conexión
             reconnectAttempts = 0; // Reset contador de reconexiones
           } else if (status === 'CHANNEL_ERROR') {
             logger.error('❌ Error en el canal de Supabase Realtime', {

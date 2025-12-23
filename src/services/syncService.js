@@ -1069,9 +1069,23 @@ class SyncService {
       }
 
       // Configurar listener de facturas para nuevos cambios
-      this.supabaseClient.setupRealtimeListener(async (invoice) => {
-        await this.processApprovedInvoice(invoice);
-      });
+      // Incluir callback de reconexión para recuperar facturas pendientes
+      this.supabaseClient.setupRealtimeListener(
+        async (invoice) => {
+          await this.processApprovedInvoice(invoice);
+        },
+        async () => {
+          // Callback ejecutado cuando se reconecta después de una caída
+          logger.info('🔄 Reconexión de Realtime detectada, verificando facturas pendientes...');
+          const recoveryResult = await this.processPendingApprovedInvoices();
+
+          if (recoveryResult.processed > 0) {
+            logger.info(`✅ Recuperación post-reconexión: ${recoveryResult.processed} facturas sincronizadas, ${recoveryResult.errors} errores`);
+          } else {
+            logger.info('✅ Recuperación post-reconexión: sin facturas pendientes');
+          }
+        }
+      );
 
       // Iniciar sincronizaciones en segundo plano
       await this.startBackgroundSync();
