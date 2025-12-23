@@ -822,6 +822,22 @@ class SyncService {
             thirdPartyCreated = true; // Marcar que se creó un tercero
             logger.info(`✓ Tercero creado exitosamente: ID_N=${createdIdN}, NIT original=${invoice.num_identificacion}`);
 
+            // CRÍTICO: Esperar un momento para asegurar que el commit de la transacción se complete
+            // Esto evita race conditions con la FK de CARPROEN
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms de espera
+
+            // Verificar que el tercero realmente existe antes de continuar
+            const verifyThird = await this.firebirdClient.query(
+              'SELECT ID_N FROM CUST WHERE ID_N = ?',
+              [createdIdN]
+            );
+
+            if (verifyThird.length === 0) {
+              throw new Error(`El tercero ${createdIdN} fue creado pero no se encuentra en CUST. Posible problema de commit de transacción.`);
+            }
+
+            logger.info(`✓ Tercero verificado en CUST: ID_N=${createdIdN}`);
+
           } catch (creationError) {
             logger.error(`Error creando tercero automáticamente:`, creationError);
             throw new Error(`No se pudo crear el tercero ${invoice.num_identificacion}: ${creationError.message}`);
@@ -864,13 +880,16 @@ class SyncService {
    */
   async insertCarproen(transaction, data) {
     try {
+      // Log detallado del ID_N que se va a insertar
+      logger.info(`Insertando en CARPROEN con ID_N="${data.ID_N}", TIPO="${data.TIPO}", BATCH=${data.BATCH}`);
+
       const fields = Object.keys(data).join(', ');
       const placeholders = Object.keys(data).map(() => '?').join(', ');
       const values = Object.values(data);
 
       const sql = `INSERT INTO CARPROEN (${fields}) VALUES (${placeholders})`;
 
-      logger.debug('Insertando en CARPROEN:', { sql, values });
+      logger.debug('SQL CARPROEN:', { sql, id_n: data.ID_N, tipo: data.TIPO, batch: data.BATCH });
 
       return new Promise((resolve, reject) => {
         transaction.query(sql, values, (err, result) => {

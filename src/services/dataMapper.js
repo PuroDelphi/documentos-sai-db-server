@@ -102,7 +102,7 @@ class DataMapper {
    */
   mapToCarproen(invoiceData, batch) {
     const { invoice } = invoiceData;
-    
+
     try {
       const total = parseFloat(invoice.total) || 0;
       const subtotal = parseFloat(invoice.subtotal) || 0;
@@ -111,12 +111,16 @@ class DataMapper {
       // Parsear la fecha de la factura correctamente
       const invoiceDate = this.parseDate(invoice.date);
 
+      // Extraer ID_N y loguear para debugging
+      const extractedIdN = this.extractIdN(invoice.num_identificacion);
+      logger.debug(`Mapeando CARPROEN: NIT original="${invoice.num_identificacion}", ID_N extraído="${extractedIdN}"`);
+
       const carproenData = {
         E: 1,
         S: 1,
         TIPO: this.documentType,
         BATCH: batch,
-        ID_N: this.extractIdN(invoice.num_identificacion).substring(0, 30),
+        ID_N: extractedIdN.substring(0, 30),
         FECHA: invoiceDate,
         TOTAL: total,
         USERNAME: 'SYSTEM'.substring(0, 10),
