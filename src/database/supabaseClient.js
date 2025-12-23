@@ -31,6 +31,7 @@ class SupabaseClient {
 
       // Obtener items de la factura (filtrado por usuario)
       // Incluir JOIN con invoice_products para obtener item_code (necesario para EA/OC)
+      // IMPORTANTE: ORDER BY id para mantener el orden de inserción en Supabase
       const { data: items, error: itemsError } = await this.client
         .from('invoice_items')
         .select(`
@@ -41,7 +42,8 @@ class SupabaseClient {
           )
         `)
         .eq('invoice_id', invoiceId)
-        .eq('user_id', this.userUUID);
+        .eq('user_id', this.userUUID)
+        .order('id', { ascending: true });
 
       if (itemsError) {
         throw new Error(`Error obteniendo items: ${itemsError.message}`);
