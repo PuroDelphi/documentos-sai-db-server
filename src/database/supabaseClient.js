@@ -70,72 +70,165 @@ class SupabaseClient {
   }
 
   /**
-   * Configura el listener de cambios en tiempo real
+   * Configura el listener de cambios en tiempo real con reconexión automática
    * @param {Function} callback - Función a ejecutar cuando hay cambios
    */
   setupRealtimeListener(callback) {
-    const channel = this.client
-      .channel('invoices-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'invoices',
-          filter: `user_id=eq.${this.userUUID}`
-        },
-        async (payload) => {
-          const invoice = payload.new;
-          const oldInvoice = payload.old;
+    let channel = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 10;
+    const reconnectDelay = 5000; // 5 segundos
 
-          // Solo procesar si el estado cambió a APROBADO
-          if (invoice.estado !== 'APROBADO') {
-            logger.debug(`Factura ${invoice.invoice_number} actualizada pero no está en estado APROBADO (estado: ${invoice.estado}), omitiendo`);
-            return;
-          }
-
-          // Solo procesar si el estado cambió (no estaba APROBADO antes)
-          if (oldInvoice && oldInvoice.estado === 'APROBADO') {
-            logger.debug(`Factura ${invoice.invoice_number} ya estaba en estado APROBADO, omitiendo`);
-            return;
-          }
-
-          logger.info('Factura aprobada detectada:', {
-            id: invoice.id,
-            invoice_number: invoice.invoice_number,
-            estado: invoice.estado,
-            estado_anterior: oldInvoice?.estado,
-            service_response: invoice.service_response,
-            fecha_hora_sync: invoice.fecha_hora_sync
-          });
-
-          // Verificar si ya fue procesada exitosamente
-          if (invoice.service_response === 'Ok' || invoice.service_response?.includes('tercero creado automáticamente')) {
-            logger.info(`Factura ${invoice.invoice_number} ya fue sincronizada exitosamente, omitiendo procesamiento`);
-            return;
-          }
-
-          try {
-            await callback(invoice);
-          } catch (error) {
-            logger.error('Error procesando factura aprobada:', error);
-          }
+    const createChannel = () => {
+      // Remover canal anterior si existe
+      if (channel) {
+        try {
+          this.client.removeChannel(channel);
+        } catch (error) {
+          logger.debug('Error removiendo canal anterior:', error.message);
         }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          logger.info('✅ Listener de Supabase Realtime SUSCRITO exitosamente');
-        } else if (status === 'CHANNEL_ERROR') {
-          logger.error('❌ Error en el canal de Supabase Realtime');
-        } else if (status === 'TIMED_OUT') {
-          logger.error('❌ Timeout en la suscripción de Supabase Realtime');
-        } else if (status === 'CLOSED') {
-          logger.warn('⚠️ Canal de Supabase Realtime cerrado');
-        }
-      });
+      }
 
-    logger.info('Configurando listener de Supabase Realtime...');
-    return channel;
+      logger.info('Creando canal de Supabase Realtime...');
+
+      channel = this.client
+        .channel('invoices-changes', {
+          config: {
+            broadcast: { self: false },
+            presence: { key: '' }
+          }
+        })
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'invoices',
+            filter: `user_id=eq.${this.userUUID}`
+          },
+          async (payload) => {
+            try {
+              const invoice = payload.new;
+              const oldInvoice = payload.old;
+
+              // Solo procesar si el estado cambió a APROBADO
+              if (invoice.estado !== 'APROBADO') {
+                logger.debug(`Factura ${invoice.invoice_number} actualizada pero no está en estado APROBADO (estado: ${invoice.estado}), omitiendo`);
+                return;
+              }
+
+              // Solo procesar si el estado cambió (no estaba APROBADO antes)
+              if (oldInvoice && oldInvoice.estado === 'APROBADO') {
+                logger.debug(`Factura ${invoice.invoice_number} ya estaba en estado APROBADO, omitiendo`);
+                return;
+              }
+
+              logger.info('Factura aprobada detectada:', {
+                id: invoice.id,
+                invoice_number: invoice.invoice_number,
+                estado: invoice.estado,
+                estado_anterior: oldInvoice?.estado,
+                service_response: invoice.service_response,
+                fecha_hora_sync: invoice.fecha_hora_sync
+              });
+
+              // Verificar si ya fue procesada exitosamente
+              if (invoice.service_response === 'Ok' || invoice.service_response?.includes('tercero creado automáticamente')) {
+                logger.info(`Factura ${invoice.invoice_number} ya fue sincronizada exitosamente, omitiendo procesamiento`);
+                return;
+              }
+
+              // Procesar factura
+              await callback(invoice);
+
+            } catch (error) {
+              logger.error('Error en el handler del evento Realtime:', {
+                error: error.message,
+                stack: error.stack,
+                payload: payload
+              });
+              // No lanzar el error para evitar que se cierre el canal
+            }
+          }
+        )
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            logger.info('✅ Listener de Supabase Realtime SUSCRITO exitosamente');
+            reconnectAttempts = 0; // Reset contador de reconexiones
+          } else if (status === 'CHANNEL_ERROR') {
+            logger.error('❌ Error en el canal de Supabase Realtime', {
+              error: err,
+              reconnectAttempts: reconnectAttempts + 1,
+              maxAttempts: maxReconnectAttempts
+            });
+
+            // Intentar reconectar
+            if (reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              logger.info(`🔄 Intentando reconectar en ${reconnectDelay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
+              setTimeout(() => {
+                createChannel();
+              }, reconnectDelay);
+            } else {
+              logger.error('❌ Máximo de intentos de reconexión alcanzado. Por favor reinicie el servicio.');
+            }
+          } else if (status === 'TIMED_OUT') {
+            logger.error('❌ Timeout en la suscripción de Supabase Realtime');
+
+            // Intentar reconectar
+            if (reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              logger.info(`🔄 Intentando reconectar en ${reconnectDelay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
+              setTimeout(() => {
+                createChannel();
+              }, reconnectDelay);
+            }
+          } else if (status === 'CLOSED') {
+            logger.warn('⚠️ Canal de Supabase Realtime cerrado');
+
+            // Intentar reconectar
+            if (reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              logger.info(`🔄 Intentando reconectar en ${reconnectDelay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
+              setTimeout(() => {
+                createChannel();
+              }, reconnectDelay);
+            }
+          } else {
+            logger.debug(`Estado del canal Realtime: ${status}`);
+          }
+        });
+
+      return channel;
+    };
+
+    // Crear canal inicial
+    return createChannel();
+  }
+
+  /**
+   * Verifica el estado de salud del canal de Realtime
+   * @param {Object} channel - Canal de Supabase
+   * @returns {Object} - Estado del canal
+   */
+  getChannelHealth(channel) {
+    if (!channel) {
+      return { healthy: false, reason: 'Canal no inicializado' };
+    }
+
+    const state = channel.state;
+
+    if (state === 'joined') {
+      return { healthy: true, state: 'joined' };
+    } else if (state === 'joining') {
+      return { healthy: true, state: 'joining', warning: 'Conectando...' };
+    } else if (state === 'leaving') {
+      return { healthy: false, state: 'leaving', reason: 'Canal cerrándose' };
+    } else if (state === 'closed') {
+      return { healthy: false, state: 'closed', reason: 'Canal cerrado' };
+    } else {
+      return { healthy: false, state: state || 'unknown', reason: 'Estado desconocido' };
+    }
   }
 
   /**
