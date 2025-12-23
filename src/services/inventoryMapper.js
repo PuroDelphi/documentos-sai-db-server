@@ -208,7 +208,10 @@ class InventoryMapper {
    * @returns {Object} - Datos mapeados para IP
    */
   async mapToIP(invoice, consecutiveNumber, documentType, defaults) {
-    const idN = this.extractIdN(invoice.third_party_nit || invoice.num_identificacion);
+    const nitOriginal = invoice.third_party_nit || invoice.num_identificacion;
+    const idN = this.extractIdN(nitOriginal);
+
+    logger.debug(`Mapeando IP: NIT original="${nitOriginal}", ID_N extraído="${idN}"`);
 
     // Calcular totales
     const subtotal = parseFloat(invoice.subtotal || 0);
@@ -457,6 +460,8 @@ class InventoryMapper {
     const quantity = parseFloat(item.quantity || 0);
     const unitPrice = parseFloat(item.unit_price || 0);
     const subtotal = quantity * unitPrice; // Calcular subtotal
+
+    logger.debug(`Mapeando ITEMACT: NIT original="${invoice.num_identificacion}", ID_N extraído="${idN}"`);
 
     // Extraer código del producto
     const productCode = this.extractProductCode(item);
