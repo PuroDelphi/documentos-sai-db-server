@@ -215,11 +215,31 @@ class InventoryMapper {
     const totalIva = parseFloat(invoice.total_iva || 0);
     const total = parseFloat(invoice.total || 0);
 
+    // Obtener ACCTP del tercero desde CUST
+    let acctValue = defaults.ACCT || null;
+    try {
+      const custResult = await this.firebirdClient.query(`
+        SELECT ACCTP
+        FROM CUST
+        WHERE ID_N = ?
+      `, [idN]);
+
+      if (custResult.length > 0 && custResult[0].ACCTP) {
+        acctValue = parseFloat(custResult[0].ACCTP);
+        logger.debug(`ACCT obtenido de CUST.ACCTP para ID_N ${idN}: ${acctValue}`);
+      } else {
+        logger.warn(`No se encontró ACCTP para ID_N ${idN}, usando valor por defecto: ${acctValue}`);
+      }
+    } catch (error) {
+      logger.error(`Error obteniendo ACCTP para ID_N ${idN}:`, error);
+      // Continuar con el valor por defecto
+    }
+
     return {
       TIPO: documentType.substring(0, 3),
       NUMBER: consecutiveNumber,
       ID_N: idN.substring(0, 30),
-      ACCT: defaults.ACCT || null,
+      ACCT: acctValue,
       PONUMBER: (invoice.invoice_number || '').substring(0, 15),
       FECHA: invoice.date ? new Date(invoice.date) : new Date(),
       COST: total,
