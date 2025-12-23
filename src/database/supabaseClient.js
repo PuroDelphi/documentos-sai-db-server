@@ -80,24 +80,23 @@ class SupabaseClient {
     const reconnectDelay = 5000; // 5 segundos
 
     const createChannel = () => {
-      // Remover canal anterior si existe
+      // Desuscribir del canal anterior si existe
       if (channel) {
         try {
-          this.client.removeChannel(channel);
+          logger.debug('Desuscribiendo del canal anterior...');
+          channel.unsubscribe();
         } catch (error) {
-          logger.debug('Error removiendo canal anterior:', error.message);
+          logger.debug('Error desuscribiendo del canal anterior:', error.message);
         }
       }
 
       logger.info('Creando canal de Supabase Realtime...');
 
+      // Usar un nombre de canal único con timestamp para evitar conflictos
+      const channelName = `invoices-changes-${Date.now()}`;
+
       channel = this.client
-        .channel('invoices-changes', {
-          config: {
-            broadcast: { self: false },
-            presence: { key: '' }
-          }
-        })
+        .channel(channelName)
         .on(
           'postgres_changes',
           {
@@ -108,8 +107,20 @@ class SupabaseClient {
           },
           async (payload) => {
             try {
+              logger.debug('📨 Evento Realtime recibido:', {
+                eventType: payload.eventType,
+                table: payload.table,
+                hasNew: !!payload.new,
+                hasOld: !!payload.old
+              });
+
               const invoice = payload.new;
               const oldInvoice = payload.old;
+
+              if (!invoice) {
+                logger.warn('⚠️ Payload sin datos de factura nueva, omitiendo');
+                return;
+              }
 
               // Solo procesar si el estado cambió a APROBADO
               if (invoice.estado !== 'APROBADO') {
@@ -123,7 +134,7 @@ class SupabaseClient {
                 return;
               }
 
-              logger.info('Factura aprobada detectada:', {
+              logger.info('✅ Factura aprobada detectada:', {
                 id: invoice.id,
                 invoice_number: invoice.invoice_number,
                 estado: invoice.estado,
@@ -138,11 +149,24 @@ class SupabaseClient {
                 return;
               }
 
-              // Procesar factura
-              await callback(invoice);
+              // Procesar factura en background para no bloquear el canal
+              logger.info(`🔄 Iniciando procesamiento de factura ${invoice.invoice_number}...`);
+
+              // Usar setImmediate para procesar en el siguiente tick del event loop
+              setImmediate(async () => {
+                try {
+                  await callback(invoice);
+                  logger.info(`✅ Factura ${invoice.invoice_number} procesada exitosamente`);
+                } catch (callbackError) {
+                  logger.error(`❌ Error procesando factura ${invoice.invoice_number}:`, {
+                    error: callbackError.message,
+                    stack: callbackError.stack
+                  });
+                }
+              });
 
             } catch (error) {
-              logger.error('Error en el handler del evento Realtime:', {
+              logger.error('❌ Error crítico en el handler del evento Realtime:', {
                 error: error.message,
                 stack: error.stack,
                 payload: payload
@@ -152,50 +176,50 @@ class SupabaseClient {
           }
         )
         .subscribe((status, err) => {
+          logger.debug(`📡 Estado de suscripción Realtime: ${status}`, { error: err });
+
           if (status === 'SUBSCRIBED') {
             logger.info('✅ Listener de Supabase Realtime SUSCRITO exitosamente');
             reconnectAttempts = 0; // Reset contador de reconexiones
           } else if (status === 'CHANNEL_ERROR') {
             logger.error('❌ Error en el canal de Supabase Realtime', {
-              error: err,
+              error: err?.message || err,
+              errorDetails: err,
               reconnectAttempts: reconnectAttempts + 1,
               maxAttempts: maxReconnectAttempts
             });
 
-            // Intentar reconectar
-            if (reconnectAttempts < maxReconnectAttempts) {
-              reconnectAttempts++;
-              logger.info(`🔄 Intentando reconectar en ${reconnectDelay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
-              setTimeout(() => {
-                createChannel();
-              }, reconnectDelay);
-            } else {
-              logger.error('❌ Máximo de intentos de reconexión alcanzado. Por favor reinicie el servicio.');
-            }
+            // NO reconectar automáticamente en CHANNEL_ERROR
+            // Esto suele indicar un problema de configuración
+            logger.error('⚠️ CHANNEL_ERROR detectado. Verifique:');
+            logger.error('   1. Que Realtime esté habilitado en Supabase para la tabla "invoices"');
+            logger.error('   2. Que el user_id en el filtro sea correcto');
+            logger.error('   3. Que no haya problemas de permisos RLS');
+
           } else if (status === 'TIMED_OUT') {
             logger.error('❌ Timeout en la suscripción de Supabase Realtime');
 
-            // Intentar reconectar
+            // Intentar reconectar solo si no es un problema persistente
             if (reconnectAttempts < maxReconnectAttempts) {
               reconnectAttempts++;
-              logger.info(`🔄 Intentando reconectar en ${reconnectDelay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
+              const delay = reconnectDelay * reconnectAttempts; // Backoff exponencial
+              logger.info(`🔄 Intentando reconectar en ${delay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
               setTimeout(() => {
                 createChannel();
-              }, reconnectDelay);
+              }, delay);
+            } else {
+              logger.error('❌ Máximo de intentos de reconexión alcanzado. Por favor reinicie el servicio.');
             }
           } else if (status === 'CLOSED') {
             logger.warn('⚠️ Canal de Supabase Realtime cerrado');
 
-            // Intentar reconectar
-            if (reconnectAttempts < maxReconnectAttempts) {
-              reconnectAttempts++;
-              logger.info(`🔄 Intentando reconectar en ${reconnectDelay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
-              setTimeout(() => {
-                createChannel();
-              }, reconnectDelay);
-            }
+            // NO reconectar automáticamente si se cerró intencionalmente
+            // Solo reconectar si fue un cierre inesperado
+            logger.warn('   El canal se cerró. Esto puede ser normal al apagar el servicio.');
+            logger.warn('   Si el servicio sigue corriendo, puede haber un problema.');
+
           } else {
-            logger.debug(`Estado del canal Realtime: ${status}`);
+            logger.debug(`📊 Estado del canal Realtime: ${status}`);
           }
         });
 
