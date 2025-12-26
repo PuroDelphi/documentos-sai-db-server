@@ -133,6 +133,9 @@ class ThirdPartyCreationService {
       idN = nitCompleto.split('-')[0].trim();
     }
 
+    // Intentar obtener teléfono de la factura, si no usar default
+    const phone = cleanString(invoice.billing_phone || invoice.phone, 40) || defaults.PHONE1;
+
     return {
       ID_N: idN, // Solo números, sin guión ni dígito de verificación
       NIT: nitCompleto, // NIT completo con guión (si lo tiene)
@@ -142,9 +145,9 @@ class ThirdPartyCreationService {
       CITY: cleanString(invoice.billing_city, 30) || defaults.CITY,
       DEPARTAMENTO: cleanString(invoice.billing_state, 40) || defaults.DEPARTAMENTO,
       PAIS: cleanString(invoice.billing_country, 30) || defaults.PAIS,
-      EMAIL: defaults.EMAIL,
-      PHONE1: defaults.PHONE1,
-      PHONE3: '', // Campo requerido por el trigger
+      EMAIL: cleanString(invoice.billing_email || invoice.email, 250) || defaults.EMAIL,
+      PHONE1: phone,
+      PHONE3: phone, // Usar el mismo teléfono para PHONE3 (campo requerido por trigger)
       E: defaults.E,
       S: defaults.S,
       GRAVABLE: defaults.GRAVABLE,
@@ -154,8 +157,16 @@ class ThirdPartyCreationService {
       OTRO: defaults.OTRO,
       EMPLEADO: defaults.EMPLEADO,
       ZONA: defaults.ZONA,
-      IDVEND: defaults.ID_VEND, // Campo requerido por el trigger
-      FECHA_CREACION: new Date()
+      IDVEND: 99, // Vendedor por defecto: 99
+      FECHA_CREACION: new Date(),
+
+      // Nuevos campos según especificaciones
+      CLITIP: 0, // Tipo Contribuyente: 0 = Persona Jurídica
+      ID_TIPOCARTERA: 'CC', // Tipo Cartera: CC
+      REGIMEN: '48', // Tipo Régimen: 48
+      ACTIVIDAD: 1, // Actividad económica por defecto (se puede mejorar según factura)
+      RESIDENTE: 'S', // Tipo procedencia: Residente
+      INACTIVO: 'N' // Inactivo: False
     };
   }
 
@@ -181,6 +192,9 @@ class ThirdPartyCreationService {
       idN = nitCompleto.split('-')[0].trim();
     }
 
+    // Intentar obtener teléfono de la factura, si no usar default
+    const phone = cleanString(invoice.billing_phone || invoice.phone, 40) || defaults.PHONE1;
+
     return {
       ID_N: idN, // Solo números, sin guión ni dígito de verificación (debe coincidir con CUST.ID_N)
       SUCCLIENTE: 0, // Sucursal principal siempre es 0
@@ -191,11 +205,13 @@ class ThirdPartyCreationService {
       CITY: cleanString(invoice.billing_city, 30) || defaults.CITY,
       DEPARTAMENTO: cleanString(invoice.billing_state, 40) || defaults.DEPARTAMENTO,
       PAIS: cleanString(invoice.billing_country, 30) || defaults.PAIS,
-      EMAIL: defaults.EMAIL,
-      PHONE1: defaults.PHONE1,
+      EMAIL: cleanString(invoice.billing_email || invoice.email, 250) || defaults.EMAIL,
+      PHONE1: phone,
+      PHONE3: phone, // Usar el mismo teléfono para PHONE3
       ZONA: defaults.ZONA,
-      ID_VEND: defaults.ID_VEND,
-      ESTADO: 'ACTIVO'
+      ID_VEND: 99, // Vendedor por defecto: 99
+      ESTADO: 'ACTIVO',
+      TIPO_ID: '31' // Tipo documento: 31 = NIT
     };
   }
 
