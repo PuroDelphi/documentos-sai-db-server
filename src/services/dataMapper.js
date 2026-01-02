@@ -14,6 +14,9 @@ class DataMapper {
     // Configuración del tipo de documento
     this.documentType = appConfig.get('document_type', 'FIA');
 
+    // Configuración para descripción de CARPRODE
+    this.useHeaderDescriptionForDetail = appConfig.get('use_header_description_for_detail', false);
+
     // Validar longitudes según esquema de BD
     if (this.defaultProjectCode && this.defaultProjectCode.length > 10) {
       logger.warn(`default_project_code truncado de ${this.defaultProjectCode.length} a 10 caracteres`);
@@ -35,6 +38,7 @@ class DataMapper {
     logger.info(`Tipo de documento: ${this.documentType}`);
     logger.info(`Proyecto predeterminado: ${this.defaultProjectCode || 'no configurado'}`);
     logger.info(`Actividad predeterminada: ${this.defaultActivityCode || 'no configurada'}`);
+    logger.info(`Descripción CARPRODE: ${this.useHeaderDescriptionForDetail ? 'usar descripción del encabezado (CARPROEN.OBSERV)' : 'usar descripción de la entrada contable'}`);
   }
 
   /**
@@ -125,7 +129,7 @@ class DataMapper {
         TOTAL: total,
         USERNAME: 'SYSTEM'.substring(0, 10),
         FECHA_HORA: new Date().toLocaleString('es-CO').substring(0, 20),
-        OBSERV: `Factura ${invoice.invoice_number} - ${invoice.billing_name}`.substring(0, 200),
+        OBSERV: `Factura ${invoice.invoice_number} - ${invoice.billing_name}`.substring(0, 200).toUpperCase(),
         BANCO: ''.substring(0, 30),
         CHEQUE: ''.substring(0, 15),
         DUEDATE: invoiceDate, // Usar la misma fecha de la factura
@@ -188,6 +192,9 @@ class DataMapper {
       // Parsear la fecha de la factura una sola vez
       const invoiceDate = this.parseDate(invoice.date);
 
+      // Generar la descripción del encabezado (CARPROEN.OBSERV) para usar en CARPRODE si está configurado
+      const headerDescription = `Factura ${invoice.invoice_number} - ${invoice.billing_name}`.substring(0, 40).toUpperCase();
+
       const carprodeData = entries.map((entry) => {
         const debit = parseFloat(entry.debit) || 0;
         const credit = parseFloat(entry.credit) || 0;
@@ -198,10 +205,16 @@ class DataMapper {
           ? (invoice.invoice_number || '').substring(0, 15)
           : batch.toString().substring(0, 15);
 
+        // Determinar la descripción según la configuración
+        const description = this.useHeaderDescriptionForDetail
+          ? headerDescription
+          : (entry.description || '').substring(0, 40).toUpperCase();
+
         // Log de configuraciones solo para la primera entrada (evitar spam)
         if (entries.indexOf(entry) === 0) {
           logger.debug(`Campo INVC configurado como: ${invcValue} (${this.useInvoiceNumberForInvc ? 'invoice_number' : 'batch'})`);
           logger.debug(`Fecha de factura para CARPRODE: ${invoice.date} -> ${invoiceDate?.toISOString().split('T')[0]}`);
+          logger.debug(`Descripción CARPRODE: ${this.useHeaderDescriptionForDetail ? 'usando descripción del encabezado' : 'usando descripción de la entrada contable'}`);
 
           if (this.defaultProjectCode) {
             logger.debug(`Proyecto predeterminado aplicado: ${this.defaultProjectCode}`);
@@ -231,7 +244,7 @@ class DataMapper {
           CCOST: 0,
           ACTIVIDAD: this.defaultActivityCode || '', // Código de actividad predeterminado
           PROYECTO: this.defaultProjectCode || '', // Código de proyecto predeterminado
-          DESCRIPCION: (entry.description || '').substring(0, 40),
+          DESCRIPCION: description, // Configurable: descripción del encabezado o de la entrada
           DIAS: 0,
           DESTINO: 1,
           TIPO_REF: null,

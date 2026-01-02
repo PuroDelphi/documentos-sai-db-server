@@ -120,7 +120,7 @@ class ThirdPartyCreationService {
   mapInvoiceToCust(invoice, defaults) {
     const cleanString = (value, maxLength) => {
       if (!value) return '';
-      return value.toString().trim().substring(0, maxLength);
+      return value.toString().trim().substring(0, maxLength).toUpperCase();
     };
 
     // Separar NIT del dígito de verificación
@@ -179,7 +179,7 @@ class ThirdPartyCreationService {
   mapInvoiceToShipto(invoice, defaults) {
     const cleanString = (value, maxLength) => {
       if (!value) return '';
-      return value.toString().trim().substring(0, maxLength);
+      return value.toString().trim().substring(0, maxLength).toUpperCase();
     };
 
     // Separar NIT del dígito de verificación (igual que en CUST)

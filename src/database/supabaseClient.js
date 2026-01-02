@@ -277,6 +277,7 @@ class SupabaseClient {
 
   /**
    * Obtiene facturas aprobadas que no han sido sincronizadas
+   * Ordenadas por fecha y consecutivo de proveedor (invoice_number)
    * @returns {Promise<Array>} - Array de facturas pendientes de sincronización
    */
   async getPendingApprovedInvoices() {
@@ -287,7 +288,8 @@ class SupabaseClient {
         .eq('estado', 'APROBADO')
         .eq('user_id', this.userUUID)
         .or('service_response.is.null,service_response.neq.Ok')
-        .order('date', { ascending: true });
+        .order('date', { ascending: true })
+        .order('invoice_number', { ascending: true });
 
       if (error) {
         throw new Error(`Error obteniendo facturas pendientes: ${error.message}`);
