@@ -25,6 +25,7 @@ El servicio utiliza un **sistema de configuración centralizada** con dos nivele
   - Configuración de Pinecone
   - Configuración de embeddings
   - Tipos de documentos
+  - **Configuración de confiabilidad del Realtime** (NUEVO)
 - **Caché local:** `.cache/config.encrypted` (encriptado)
 - **Actualización:** Automática desde Supabase en cada inicio
 
@@ -34,10 +35,41 @@ El servicio utiliza un **sistema de configuración centralizada** con dos nivele
 - ✅ **Multi-tenant:** Cada usuario tiene su propia configuración
 - ✅ **Offline:** Caché local permite funcionar sin conexión a Supabase
 - ✅ **Centralización:** Gestión de configuración desde un solo lugar
+- ✅ **Alta Confiabilidad:** Sistema de triple protección para sincronización de facturas (NUEVO)
 
 ---
 
-## 📋 Requisitos del Sistema
+## � Sistema de Triple Protección para Sincronización (NUEVO)
+
+El servicio incluye un **sistema de triple protección** que garantiza que ninguna factura se pierda y que el servicio NO requiera reinicio manual:
+
+### 1️⃣ Realtime (Principal)
+- Procesa facturas en tiempo real cuando se aprueban en Supabase
+- Reconexión automática cuando el canal se cierra inesperadamente
+- Recuperación automática de facturas pendientes al reconectar
+
+### 2️⃣ Health Check (Cada 2 minutos)
+- Verifica el estado del canal Realtime periódicamente
+- Detecta estados no saludables (closed, leaving, unknown)
+- Reconecta automáticamente si el canal no está saludable
+- Ejecuta recuperación de facturas pendientes
+
+### 3️⃣ Polling de Respaldo (Cada 5 minutos - Configurable)
+- Verifica facturas pendientes en Supabase como red de seguridad
+- Procesa facturas que no fueron capturadas por Realtime
+- Configurable desde `invoice_config` en Supabase
+
+### ✅ Beneficios:
+- **Ninguna factura se pierde** - Triple capa de protección
+- **Sin reinicio manual** - Reconexión automática
+- **Alta disponibilidad** - El servicio se recupera automáticamente
+- **Configurable** - Ajusta intervalos desde Supabase sin cambiar código
+
+**Documentación completa:** Ver [docs/REALTIME_RELIABILITY_IMPROVEMENTS.md](REALTIME_RELIABILITY_IMPROVEMENTS.md)
+
+---
+
+## �📋 Requisitos del Sistema
 
 ### En el Servidor de Desarrollo (donde compilas)
 - Windows 10 o superior
@@ -135,11 +167,29 @@ Antes de instalar en producción, **debes configurar la tabla `invoice_config` e
 1. **Crear la tabla** (si no existe):
    - Ejecuta el script: `database/migrations/create_invoice_config_table.sql`
 
-2. **Insertar configuración para tu usuario**:
+2. **Aplicar migraciones nuevas** (IMPORTANTE):
+   - Ejecuta: `supabase/migrations/add_carprode_description_config.sql`
+   - Ejecuta: `supabase/migrations/add_invoice_polling_config.sql`
+
+   O ejecuta manualmente en Supabase SQL Editor:
+   ```sql
+   -- Migración 1: Descripción de CARPRODE
+   ALTER TABLE invoice_config
+   ADD COLUMN IF NOT EXISTS use_header_description_for_detail BOOLEAN DEFAULT false;
+
+   -- Migración 2: Polling de facturas
+   ALTER TABLE invoice_config
+   ADD COLUMN IF NOT EXISTS enable_invoice_polling BOOLEAN DEFAULT true;
+
+   ALTER TABLE invoice_config
+   ADD COLUMN IF NOT EXISTS invoice_polling_interval INTEGER DEFAULT 5;
+   ```
+
+3. **Insertar configuración para tu usuario**:
    - Ejecuta el script: `database/migrations/insert_default_config.sql`
    - O inserta manualmente desde Supabase SQL Editor
 
-3. **Verificar que existe el registro**:
+4. **Verificar que existe el registro**:
    ```sql
    SELECT * FROM invoice_config WHERE user_id = 'tu-user-uuid';
    ```
@@ -319,6 +369,8 @@ SELECT * FROM invoice_config WHERE user_id = 'tu-user-uuid';
 Ver documentación completa en [docs/CONFIGURACION_CENTRALIZADA.md](CONFIGURACION_CENTRALIZADA.md)
 
 **Principales configuraciones:**
+
+#### Sincronización de Datos
 - `third_parties_sync_interval` - Intervalo de sincronización de terceros (minutos)
 - `chart_of_accounts_sync_interval` - Intervalo de sincronización de cuentas (minutos)
 - `products_sync_interval` - Intervalo de sincronización de productos (minutos)
@@ -326,6 +378,21 @@ Ver documentación completa en [docs/CONFIGURACION_CENTRALIZADA.md](CONFIGURACIO
 - `account_exclude_ranges` - Rangos de cuentas a excluir
 - `sync_only_active_accounts` - Solo sincronizar cuentas activas
 - `sync_only_active_products` - Solo sincronizar productos activos
+
+#### Confiabilidad del Realtime (NUEVO)
+- `enable_invoice_polling` - Habilitar polling de facturas pendientes (true/false)
+- `invoice_polling_interval` - Intervalo de polling en minutos (por defecto: 5)
+- `enable_invoice_recovery` - Habilitar recuperación al inicio (true/false)
+- `recovery_batch_size` - Tamaño de lote para recuperación (por defecto: 10)
+
+#### Configuración de Facturas
+- `use_invoice_number_for_invc` - Usar número de factura en campo INVC (true/false)
+- `use_header_description_for_detail` - Usar descripción del encabezado en CARPRODE (true/false)
+- `default_project_code` - Código de proyecto predeterminado
+- `default_activity_code` - Código de actividad predeterminado
+- `document_type` - Tipo de documento (FIA, FIL, etc.)
+
+#### Otros
 - `enable_pinecone_sync` - Habilitar sincronización con Pinecone
 - `log_level` - Nivel de logs (debug, info, warn, error)
 
