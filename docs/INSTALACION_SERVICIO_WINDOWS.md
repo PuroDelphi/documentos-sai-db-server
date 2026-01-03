@@ -104,13 +104,6 @@ Este comando compila:
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_ANON_KEY=tu_anon_key_aqui
 
-# Credenciales de Firebird
-FIREBIRD_HOST=localhost
-FIREBIRD_PORT=3050
-FIREBIRD_DATABASE=C:\ruta\a\tu\base.FDB
-FIREBIRD_USER=SYSDBA
-FIREBIRD_PASSWORD=tu_password_firebird
-
 # UUID del usuario (obtenerlo de Supabase tabla invoice_users)
 USER_UUID=7d2cb156-b71e-45e0-8863-d5017c6099ff
 

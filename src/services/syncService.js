@@ -25,6 +25,7 @@ class SyncService {
       thirdParties: null, // Intervalo para sincronización de terceros
       chartOfAccounts: null, // Intervalo para sincronización de cuentas
       products: null, // Intervalo para sincronización de productos
+      invoicePolling: null, // Intervalo para polling de facturas pendientes (respaldo)
     };
 
     // Configuración de tiempos (se carga desde appConfig)
@@ -43,6 +44,9 @@ class SyncService {
       enableRecovery: appConfig.get('enable_invoice_recovery', true),
       recoveryBatchSize: appConfig.get('recovery_batch_size', 10),
       enableAutoThirdPartyCreation: appConfig.get('enable_auto_third_party_creation', true),
+      // Configuración de polling de facturas (respaldo del Realtime)
+      invoicePollingInterval: (appConfig.get('invoice_polling_interval', 5)) * 60 * 1000, // Por defecto 5 minutos
+      enableInvoicePolling: appConfig.get('enable_invoice_polling', true), // Habilitado por defecto
       // Configuración de sincronización de inventario
       syncEA: appConfig.get('sync_ea', true),
       syncOC: appConfig.get('sync_oc', false),
@@ -1122,6 +1126,7 @@ class SyncService {
 
       logger.info('Servicio de sincronización iniciado y escuchando cambios...');
       logger.info(`Recuperación de facturas: ${this.syncConfig.enableRecovery ? 'HABILITADA' : 'DESHABILITADA'}`);
+      logger.info(`Polling de facturas: ${this.syncConfig.enableInvoicePolling ? `HABILITADO (cada ${this.syncConfig.invoicePollingInterval / 60000} minutos)` : 'DESHABILITADO'}`);
       logger.info(`Sincronización de terceros programada cada ${this.syncConfig.thirdPartiesInterval / 60000} minutos`);
       logger.info(`Sincronización de cuentas programada cada ${this.syncConfig.chartOfAccountsInterval / 60000} minutos`);
       logger.info(`Sincronización de productos programada cada ${this.syncConfig.productsInterval / 60000} minutos`);
@@ -1164,9 +1169,61 @@ class SyncService {
         await this.syncProductsBackground();
       }, this.syncConfig.productsInterval);
 
+      // Configurar polling de facturas pendientes (respaldo del Realtime)
+      if (this.syncConfig.enableInvoicePolling) {
+        this.syncIntervals.invoicePolling = setInterval(async () => {
+          await this.pollPendingInvoices();
+        }, this.syncConfig.invoicePollingInterval);
+
+        logger.info(`Polling de facturas pendientes habilitado (cada ${this.syncConfig.invoicePollingInterval / 60000} minutos)`);
+      } else {
+        logger.info('Polling de facturas pendientes deshabilitado');
+      }
+
       logger.info('Sincronizaciones en segundo plano configuradas');
     } catch (error) {
       logger.error('Error configurando sincronizaciones en segundo plano:', error);
+    }
+  }
+
+  /**
+   * Polling periódico de facturas pendientes (respaldo del Realtime)
+   * Se ejecuta cada X minutos para verificar si hay facturas que no se procesaron
+   */
+  async pollPendingInvoices() {
+    try {
+      logger.debug('🔍 Polling: Verificando facturas pendientes...');
+
+      // Obtener facturas pendientes
+      const pendingInvoices = await this.supabaseClient.getPendingApprovedInvoices();
+
+      if (pendingInvoices.length === 0) {
+        logger.debug('✅ Polling: Sin facturas pendientes');
+        return { processed: 0, errors: 0 };
+      }
+
+      logger.info(`⚠️ Polling detectó ${pendingInvoices.length} factura(s) pendiente(s) - procesando...`);
+
+      let processed = 0;
+      let errors = 0;
+
+      for (const invoice of pendingInvoices) {
+        try {
+          await this.processApprovedInvoice(invoice);
+          processed++;
+          logger.info(`✅ Polling: Factura ${invoice.invoice_number} procesada (${processed}/${pendingInvoices.length})`);
+        } catch (error) {
+          errors++;
+          logger.error(`❌ Polling: Error procesando factura ${invoice.invoice_number}:`, error.message);
+        }
+      }
+
+      logger.info(`✅ Polling completado: ${processed} facturas procesadas, ${errors} errores`);
+      return { processed, errors };
+
+    } catch (error) {
+      logger.error('❌ Error en polling de facturas pendientes:', error);
+      return { processed: 0, errors: 1 };
     }
   }
 

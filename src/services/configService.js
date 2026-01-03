@@ -143,6 +143,9 @@ class ConfigService {
         recovery_batch_size: 10,
         enable_auto_third_party_creation: true,
         use_invoice_number_for_invc: false,
+        enable_invoice_polling: true, // Polling de respaldo habilitado por defecto
+        invoice_polling_interval: 5, // Cada 5 minutos
+        use_header_description_for_detail: false, // Usar descripción de entrada contable por defecto
 
         // Documentos
         default_project_code: '',

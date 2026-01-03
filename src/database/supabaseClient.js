@@ -7,6 +7,8 @@ class SupabaseClient {
   constructor() {
     this.client = createClient(config.supabase.url, config.supabase.anonKey);
     this.userUUID = validateAndGetUserUUID();
+    this.realtimeChannel = null; // Almacenar referencia al canal
+    this.healthCheckInterval = null; // Almacenar referencia al intervalo de health check
     logger.info(`Cliente Supabase inicializado para usuario: ${this.userUUID}`);
   }
 
@@ -231,23 +233,95 @@ class SupabaseClient {
               logger.error('❌ Máximo de intentos de reconexión alcanzado. Por favor reinicie el servicio.');
             }
           } else if (status === 'CLOSED') {
-            logger.warn('⚠️ Canal de Supabase Realtime cerrado');
+            logger.warn('⚠️ Canal de Supabase Realtime cerrado inesperadamente');
 
-            // NO reconectar automáticamente si se cerró intencionalmente
-            // Solo reconectar si fue un cierre inesperado
-            logger.warn('   El canal se cerró. Esto puede ser normal al apagar el servicio.');
-            logger.warn('   Si el servicio sigue corriendo, puede haber un problema.');
+            // Reconectar automáticamente si no se alcanzó el máximo de intentos
+            if (reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              const delay = reconnectDelay * reconnectAttempts; // Backoff exponencial
+              logger.info(`🔄 Reconectando canal cerrado en ${delay / 1000} segundos... (intento ${reconnectAttempts}/${maxReconnectAttempts})`);
+              setTimeout(() => {
+                createChannel();
+              }, delay);
+            } else {
+              logger.error('❌ Máximo de intentos de reconexión alcanzado. Por favor reinicie el servicio.');
+            }
 
           } else {
             logger.debug(`📊 Estado del canal Realtime: ${status}`);
           }
         });
 
+      // Almacenar referencia al canal
+      this.realtimeChannel = channel;
       return channel;
     };
 
     // Crear canal inicial
-    return createChannel();
+    const initialChannel = createChannel();
+
+    // Configurar health check periódico (cada 2 minutos)
+    this.startHealthCheck(createChannel, onReconnect);
+
+    return initialChannel;
+  }
+
+  /**
+   * Inicia el health check periódico del canal de Realtime
+   * @param {Function} createChannel - Función para crear un nuevo canal
+   * @param {Function} onReconnect - Callback de reconexión
+   */
+  startHealthCheck(createChannel, onReconnect) {
+    // Limpiar intervalo anterior si existe
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    // Health check cada 2 minutos
+    const healthCheckIntervalMs = 2 * 60 * 1000; // 2 minutos
+
+    this.healthCheckInterval = setInterval(() => {
+      const health = this.getChannelHealth(this.realtimeChannel);
+
+      if (!health.healthy) {
+        logger.warn(`⚠️ Health check detectó canal no saludable: ${health.reason || health.state}`);
+        logger.info('🔄 Intentando reconectar canal...');
+
+        // Recrear canal
+        try {
+          createChannel();
+
+          // Ejecutar recuperación de facturas pendientes
+          if (onReconnect) {
+            setImmediate(async () => {
+              try {
+                await onReconnect();
+                logger.info('✅ Recuperación post-health-check completada');
+              } catch (error) {
+                logger.error('❌ Error en recuperación post-health-check:', error.message);
+              }
+            });
+          }
+        } catch (error) {
+          logger.error('❌ Error recreando canal en health check:', error.message);
+        }
+      } else {
+        logger.debug(`✅ Health check OK: Canal en estado ${health.state}`);
+      }
+    }, healthCheckIntervalMs);
+
+    logger.info(`✅ Health check de Realtime iniciado (cada ${healthCheckIntervalMs / 60000} minutos)`);
+  }
+
+  /**
+   * Detiene el health check periódico
+   */
+  stopHealthCheck() {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+      logger.info('🛑 Health check de Realtime detenido');
+    }
   }
 
   /**
