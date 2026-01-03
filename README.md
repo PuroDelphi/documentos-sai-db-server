@@ -142,8 +142,16 @@ El servicio puede instalarse de **dos formas** según tus necesidades:
    ```
 
 **📚 Documentación completa:**
+
+**Para Desarrolladores:**
 - [Guía de Instalación Detallada](docs/INSTALACION_SERVICIO_WINDOWS.md)
 - [Comparación de Métodos](docs/METODOS_INSTALACION.md)
+
+**Para Implementadores (Técnicos de Campo):**
+- [📘 Guía de Instalación para Implementadores](docs/GUIA_INSTALACION_IMPLEMENTADORES.md) - Documento principal
+- [✅ Checklist de Instalación](docs/CHECKLIST_INSTALACION.md) - Lista de verificación
+- [⚡ Referencia Rápida](docs/REFERENCIA_RAPIDA_INSTALACION.md) - Comandos esenciales
+- [❓ Preguntas Frecuentes](docs/FAQ_IMPLEMENTADORES.md) - FAQ para implementadores
 
 **Gestión del servicio:**
 ```bash
