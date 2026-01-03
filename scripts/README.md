@@ -70,13 +70,17 @@ npm run install-service
 
 **Características:**
 - Detecta automáticamente si existe el ejecutable compilado
+- **Solicita nombre del servicio** (permite personalización) - NUEVO
+- Nombre por defecto: `SupabaseFirebirdSync`
+- Valida que el nombre solo contenga caracteres válidos
 - Solicita la contraseña del `.env.encrypted` si existe
+- Solicita contraseña del caché de configuración
 - Configura el servicio para inicio automático
 - Inicia el servicio inmediatamente después de instalar
 
 **Nombre del servicio:**
-- Con ejecutable: `SupabaseFirebirdSync`
-- Sin ejecutable (desarrollo): `SupabaseFirebirdSyncDev`
+- Con ejecutable: `SupabaseFirebirdSync` (por defecto, personalizable)
+- Sin ejecutable (desarrollo): `SupabaseFirebirdSyncDev` (por defecto, personalizable)
 
 ---
 
@@ -92,9 +96,52 @@ npm run uninstall-service
 ```
 
 **Características:**
+- **Solicita nombre del servicio a desinstalar** - NUEVO
+- Nombre por defecto: `SupabaseFirebirdSync`
 - Detiene el servicio si está en ejecución
 - Elimina el servicio del sistema
 - Solicita confirmación antes de desinstalar
+
+---
+
+### install-multi-instance.js (NUEVO)
+
+Script helper para instalar **múltiples instancias** del servicio en la misma máquina.
+
+**⚠️ Requiere privilegios de ADMINISTRADOR**
+
+**Uso:**
+```bash
+npm run install-multi-instance
+```
+
+**O usando el batch:**
+```bash
+install-multi-instance.bat
+```
+
+**Características:**
+- ✅ Verifica servicios existentes para evitar duplicados
+- ✅ Valida que el nombre del servicio sea único
+- ✅ Muestra lista de servicios relacionados ya instalados
+- ✅ Proporciona ejemplos de nombres de servicio
+- ✅ Verifica todos los requisitos antes de instalar
+- ✅ Solicita contraseñas necesarias
+- ✅ Muestra resumen de configuración antes de instalar
+- ✅ Proporciona instrucciones para instalar más instancias
+
+**Casos de uso:**
+- Múltiples empresas en el mismo servidor
+- Múltiples sucursales con bases de datos independientes
+- Varios clientes en un servidor compartido
+- Ambientes separados (producción, staging, desarrollo)
+
+**Documentación completa:** [docs/INSTALACION_MULTI_INSTANCIA.md](../docs/INSTALACION_MULTI_INSTANCIA.md)
+
+**Ejemplo de nombres:**
+- `SupabaseFirebirdSync-Empresa1`
+- `SupabaseFirebirdSync-Sucursal2`
+- `SyncFirebird-Cliente3`
 
 ---
 

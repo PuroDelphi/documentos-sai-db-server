@@ -34,19 +34,37 @@ async function main() {
     const useExecutable = fs.existsSync(exePath);
 
     let scriptPath;
-    let serviceName;
+    let defaultServiceName;
     let serviceDescription;
 
     if (useExecutable) {
       console.log('✅ Ejecutable encontrado:', exePath);
       scriptPath = exePath;
-      serviceName = 'SupabaseFirebirdSync';
+      defaultServiceName = 'SupabaseFirebirdSync';
       serviceDescription = 'Servicio de sincronización entre Supabase y Firebird';
     } else {
       console.log('ℹ️  Ejecutable no encontrado, usando script Node.js');
       scriptPath = path.join(process.cwd(), 'src', 'index.js');
-      serviceName = 'SupabaseFirebirdSyncDev';
+      defaultServiceName = 'SupabaseFirebirdSyncDev';
       serviceDescription = 'Servicio de sincronización entre Supabase y Firebird (Desarrollo)';
+    }
+
+    console.log();
+    console.log('📝 CONFIGURACIÓN DEL NOMBRE DEL SERVICIO');
+    console.log();
+    console.log('Para instalar múltiples instancias en la misma máquina,');
+    console.log('cada servicio debe tener un nombre único.');
+    console.log();
+    console.log(`Nombre por defecto: ${defaultServiceName}`);
+    console.log();
+
+    const customServiceName = await question(`Ingresa el nombre del servicio (Enter para usar "${defaultServiceName}"): `);
+    const serviceName = customServiceName.trim() || defaultServiceName;
+
+    // Validar que el nombre del servicio no contenga caracteres inválidos
+    if (!/^[a-zA-Z0-9_-]+$/.test(serviceName)) {
+      console.error('❌ El nombre del servicio solo puede contener letras, números, guiones y guiones bajos');
+      process.exit(1);
     }
 
     console.log();

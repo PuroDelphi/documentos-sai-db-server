@@ -34,16 +34,25 @@ async function main() {
     const useExecutable = fs.existsSync(exePath);
 
     let scriptPath;
-    let serviceName;
+    let defaultServiceName;
 
     if (useExecutable) {
       scriptPath = exePath;
-      serviceName = 'SupabaseFirebirdSync';
+      defaultServiceName = 'SupabaseFirebirdSync';
     } else {
       scriptPath = path.join(process.cwd(), 'src', 'index.js');
-      serviceName = 'SupabaseFirebirdSyncDev';
+      defaultServiceName = 'SupabaseFirebirdSyncDev';
     }
 
+    console.log('📝 NOMBRE DEL SERVICIO A DESINSTALAR');
+    console.log();
+    console.log(`Nombre por defecto: ${defaultServiceName}`);
+    console.log();
+
+    const customServiceName = await question(`Ingresa el nombre del servicio (Enter para usar "${defaultServiceName}"): `);
+    const serviceName = customServiceName.trim() || defaultServiceName;
+
+    console.log();
     console.log('Servicio a desinstalar:');
     console.log(`  Nombre: ${serviceName}`);
     console.log(`  Script: ${scriptPath}`);

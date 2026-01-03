@@ -2,6 +2,9 @@
 
 Esta guía te ayudará a instalar el servicio de sincronización Supabase-Firebird como un servicio de Windows, con ejecutable compilado y configuración centralizada encriptada.
 
+> 💡 **¿Necesitas instalar múltiples instancias en la misma máquina?**
+> Consulta la guía de [Instalación Multi-Instancia](INSTALACION_MULTI_INSTANCIA.md)
+
 ## 🎯 Arquitectura de Configuración
 
 El servicio utiliza un **sistema de configuración centralizada** con dos niveles:
@@ -733,9 +736,53 @@ net start SupabaseFirebirdSync
 type logs\combined.log
 ```
 
+---
+
+## 🔄 Instalación Multi-Instancia
+
+¿Necesitas instalar **múltiples instancias** del servicio en la misma máquina?
+
+### Casos de Uso:
+- ✅ Múltiples empresas con bases de datos independientes
+- ✅ Múltiples sucursales en el mismo servidor
+- ✅ Varios clientes en un servidor compartido
+- ✅ Ambientes separados (producción, staging, desarrollo)
+
+### Guía Completa:
+
+📖 **[Ver Guía de Instalación Multi-Instancia](INSTALACION_MULTI_INSTANCIA.md)**
+
+Esta guía incluye:
+- Arquitectura recomendada para múltiples instancias
+- Instalación paso a paso de cada instancia
+- Configuración de nombres únicos de servicio
+- Gestión y monitoreo de múltiples servicios
+- Solución de problemas específicos
+- Ejemplos de configuración
+
+### Script Helper:
+
+Para facilitar la instalación de múltiples instancias, usa:
+
+```bash
+# Ejecutar como ADMINISTRADOR
+install-multi-instance.bat
+```
+
+Este script:
+- ✅ Valida que no exista un servicio con el mismo nombre
+- ✅ Solicita un nombre único para el servicio
+- ✅ Verifica todos los requisitos
+- ✅ Instala el servicio con configuración independiente
+
+---
+
 ## 📞 Soporte
 
 Para más información, consulta:
 - [README.md](../README.md) - Documentación general
+- [Instalación Multi-Instancia](INSTALACION_MULTI_INSTANCIA.md) - Múltiples servicios
+- [Configuración Centralizada](CONFIGURACION_CENTRALIZADA.md) - Sistema de configuración
+- [Mejoras de Confiabilidad](REALTIME_RELIABILITY_IMPROVEMENTS.md) - Sistema de triple protección
 - [Logs](../logs/) - Archivos de log del servicio
 

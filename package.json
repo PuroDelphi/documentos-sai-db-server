@@ -51,6 +51,7 @@
     "decrypt-env": "node scripts/decrypt-env.js",
     "install-service": "node scripts/install-service.js",
     "uninstall-service": "node scripts/uninstall-service.js",
+    "install-multi-instance": "node scripts/install-multi-instance.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
