@@ -96,19 +96,14 @@ Crear archivo `.env` con las credenciales de la **primera empresa**:
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 
-# Firebird - Empresa 1
-FIREBIRD_HOST=192.168.1.10
-FIREBIRD_PORT=3050
-FIREBIRD_DATABASE=C:\Databases\Empresa1.FDB
-FIREBIRD_USER=SYSDBA
-FIREBIRD_PASSWORD=masterkey
-
-# Usuario en Supabase
+# Usuario en Supabase - Empresa 1
 USER_UUID=uuid-empresa-1
 
 # Contraseña del caché
 CONFIG_CACHE_PASSWORD=tu-password-cache
 ```
+
+**IMPORTANTE:** Las credenciales de Firebird (host, puerto, base de datos, usuario, contraseña) se configuran en Supabase en la tabla `invoice_config`, NO en el archivo `.env`.
 
 #### 1.3. Encriptar el .env
 
@@ -169,19 +164,14 @@ En tu máquina de desarrollo, crear un nuevo `.env` para la **segunda empresa**:
 SUPABASE_URL=https://tu-proyecto.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 
-# Firebird - Empresa 2 (DIFERENTE)
-FIREBIRD_HOST=192.168.1.20
-FIREBIRD_PORT=3050
-FIREBIRD_DATABASE=C:\Databases\Empresa2.FDB
-FIREBIRD_USER=SYSDBA
-FIREBIRD_PASSWORD=masterkey
-
-# Usuario en Supabase (DIFERENTE)
+# Usuario en Supabase - Empresa 2 (DIFERENTE)
 USER_UUID=uuid-empresa-2
 
 # Contraseña del caché
 CONFIG_CACHE_PASSWORD=tu-password-cache
 ```
+
+**IMPORTANTE:** Las credenciales de Firebird para la Empresa 2 se configuran en Supabase en la tabla `invoice_config` para el `USER_UUID` de la Empresa 2.
 
 #### 4.3. Encriptar y Copiar
 
@@ -220,25 +210,86 @@ Para cada instancia adicional:
 
 ## ⚙️ Configuración en Supabase
 
-### Crear Usuario para Cada Instancia
+### Crear Usuario y Configuración para Cada Instancia
 
-Cada instancia necesita su propio registro en `invoice_config`:
+Cada instancia necesita su propio registro en `invoice_config` con sus credenciales de Firebird:
 
 ```sql
 -- Empresa 1
-INSERT INTO invoice_config (user_id, service_name, ...)
-VALUES ('uuid-empresa-1', 'SupabaseFirebirdSync-Empresa1', ...);
+INSERT INTO invoice_config (
+  user_id,
+  service_name,
+  -- Credenciales de Firebird para Empresa 1
+  firebird_host,
+  firebird_port,
+  firebird_database,
+  firebird_user,
+  firebird_password
+  -- ... otras configuraciones
+) VALUES (
+  'uuid-empresa-1',
+  'SupabaseFirebirdSync-Empresa1',
+  '192.168.1.10',
+  3050,
+  'C:\Databases\Empresa1.FDB',
+  'SYSDBA',
+  'password-empresa-1'
+  -- ... valores por defecto
+);
 
 -- Empresa 2
-INSERT INTO invoice_config (user_id, service_name, ...)
-VALUES ('uuid-empresa-2', 'SupabaseFirebirdSync-Empresa2', ...);
+INSERT INTO invoice_config (
+  user_id,
+  service_name,
+  firebird_host,
+  firebird_port,
+  firebird_database,
+  firebird_user,
+  firebird_password
+) VALUES (
+  'uuid-empresa-2',
+  'SupabaseFirebirdSync-Empresa2',
+  '192.168.1.20',
+  3050,
+  'C:\Databases\Empresa2.FDB',
+  'SYSDBA',
+  'password-empresa-2'
+);
 
 -- Empresa 3
-INSERT INTO invoice_config (user_id, service_name, ...)
-VALUES ('uuid-empresa-3', 'SupabaseFirebirdSync-Empresa3', ...);
+INSERT INTO invoice_config (
+  user_id,
+  service_name,
+  firebird_host,
+  firebird_port,
+  firebird_database,
+  firebird_user,
+  firebird_password
+) VALUES (
+  'uuid-empresa-3',
+  'SupabaseFirebirdSync-Empresa3',
+  '192.168.1.30',
+  3050,
+  'C:\Databases\Empresa3.FDB',
+  'SYSDBA',
+  'password-empresa-3'
+);
 ```
 
-**IMPORTANTE:** El campo `service_name` en Supabase es solo para los logs. El nombre real del servicio de Windows se define durante la instalación.
+### Puntos Importantes:
+
+1. **Credenciales de Firebird en Supabase:**
+   - ✅ Las credenciales de Firebird se configuran en `invoice_config`
+   - ✅ Cada `USER_UUID` tiene sus propias credenciales
+   - ✅ NO se configuran en el archivo `.env`
+
+2. **Campo `service_name`:**
+   - ℹ️ Es solo para identificación en logs
+   - ℹ️ El nombre real del servicio de Windows se define durante la instalación
+
+3. **Archivo `.env`:**
+   - ✅ Solo contiene: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, USER_UUID, CONFIG_CACHE_PASSWORD
+   - ❌ NO contiene credenciales de Firebird
 
 ---
 

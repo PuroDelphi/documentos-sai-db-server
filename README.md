@@ -59,19 +59,16 @@ npm install
    SUPABASE_URL=https://tu-proyecto.supabase.co
    SUPABASE_ANON_KEY=tu_anon_key_aqui
 
-   # Credenciales de Firebird
-   FIREBIRD_HOST=localhost
-   FIREBIRD_PORT=3050
-   FIREBIRD_DATABASE=C:/path/to/database.fdb
-   FIREBIRD_USER=SYSDBA
-   FIREBIRD_PASSWORD=tu_password_aqui
-
    # Usuario del servicio
    USER_UUID=uuid-del-usuario-en-invoice_user
 
    # Contraseña para encriptar caché de configuración
    CONFIG_CACHE_PASSWORD=password_seguro_para_cache
    ```
+
+   **IMPORTANTE:** Las credenciales de Firebird (host, puerto, base de datos, usuario, contraseña) se configuran en Supabase en la tabla `invoice_config`, NO en el archivo `.env`.
+
+   > 📖 Ver [Configuración Centralizada](docs/CONFIGURACION_CENTRALIZADA.md) para más detalles.
 
 5. **Insertar configuración operativa en Supabase**
 
