@@ -1,0 +1,55 @@
+================================================================
+ÍCONO DEL INSTALADOR
+================================================================
+
+Para agregar un ícono personalizado al instalador:
+
+1. Crear o conseguir un archivo de ícono (.ico)
+   - Tamaño recomendado: 48x48 píxeles o 256x256 píxeles
+   - Formato: .ico (Windows Icon)
+   - Puede contener múltiples tamaños
+
+2. Guardar el archivo como:
+   installer/icon.ico
+
+3. El script setup.iss ya está configurado para usar este ícono
+
+================================================================
+HERRAMIENTAS PARA CREAR ÍCONOS
+================================================================
+
+Opciones gratuitas:
+
+1. IcoFX (https://icofx.ro/)
+   - Editor de íconos profesional
+   - Versión gratuita disponible
+
+2. GIMP (https://www.gimp.org/)
+   - Editor de imágenes gratuito
+   - Puede exportar a formato .ico
+
+3. Convertidores en línea:
+   - https://convertio.co/es/png-ico/
+   - https://www.icoconverter.com/
+
+================================================================
+RECOMENDACIONES
+================================================================
+
+- Usar colores corporativos de la empresa
+- Diseño simple y reconocible
+- Probar en diferentes tamaños
+- Incluir versiones de 16x16, 32x32, 48x48 y 256x256 píxeles
+
+================================================================
+NOTA
+================================================================
+
+Si no se proporciona un ícono personalizado, Inno Setup usará
+el ícono predeterminado del instalador.
+
+El instalador funcionará correctamente sin un ícono personalizado,
+pero se verá más profesional con uno.
+
+================================================================
+

@@ -16,13 +16,27 @@ Este servicio sincroniza automáticamente las facturas aprobadas desde Supabase 
 - **🔧 Configuración centralizada** en Supabase con caché local encriptado
 - **🔐 Seguridad mejorada** con credenciales encriptadas y RLS
 - **👥 Multi-tenant** con configuración por usuario
+- **📦 Instalador automático** para Windows con wizard gráfico
+- **🔄 Puertos alternativos** para evitar conflictos
+- **🔌 Incluye fbclient.dll** para Firebird 2.5
 
 ## 📋 Requisitos
 
-- Node.js 16 o superior
+### Para Desarrollo
+- Node.js 18 o superior
 - Acceso a base de datos Supabase
 - Acceso a base de datos Firebird SAIDB
 - Permisos de lectura en Supabase y escritura en Firebird
+
+### Para Compilación
+- Node.js 18 o superior
+- Inno Setup 6 (para compilar el instalador)
+- PKG (instalado automáticamente con npm install)
+
+### Para Implementadores (Instalación)
+- Windows 7 o superior
+- Permisos de administrador
+- Firebird instalado y configurado
 
 ## 🛠️ Instalación
 
@@ -83,57 +97,83 @@ npm install
 
 6. **Encriptar el archivo .env**
    ```bash
-   npm run encrypt-env
+   node scripts/encrypt-env.js
    ```
+
+## 📦 Compilación del Instalador
+
+### Compilación Rápida (Todo en Uno)
+
+```powershell
+.\scripts\build-all.ps1
+```
+
+Este script compila automáticamente:
+1. El ejecutable con PKG (`dist/supabase-firebird-sync.exe`)
+2. El instalador con Inno Setup (`installer/Output/InstaladorSyncFirebird-v1.0.0.exe`)
+
+### Compilación Paso a Paso
+
+#### 1. Compilar solo el ejecutable
+
+```bash
+npm run build:legacy
+```
+
+Genera: `dist/supabase-firebird-sync.exe` (~50 MB)
+
+#### 2. Compilar solo el instalador
+
+```powershell
+.\scripts\build-installer.ps1
+```
+
+Genera: `installer/Output/InstaladorSyncFirebird-v1.0.0.exe` (~50 MB)
+
+### Documentación Completa
+
+Ver [GUIA_COMPILACION_COMPLETA.md](docs/GUIA_COMPILACION_COMPLETA.md) para:
+- Requisitos previos
+- Encriptación del archivo .env
+- Opciones avanzadas de compilación
+- Solución de problemas
 
 ## 🚀 Uso
 
 ### Desarrollo
+
 ```bash
 npm run dev
 ```
 
 ### Producción (Node.js)
+
 ```bash
 npm start
 ```
 
 ### 🪟 Instalación como Servicio de Windows
 
-El servicio puede instalarse de **dos formas** según tus necesidades:
+#### Para Implementadores (Recomendado)
 
-#### 🟢 Método A: Instalación Standalone (Recomendado para Producción)
-**Sin Node.js en el servidor de producción**
+**Usar el instalador gráfico:**
 
-1. **Compilar todos los ejecutables (en servidor de desarrollo):**
-   ```bash
-   npm run build:complete
-   ```
-   O usar el script batch:
-   ```bash
-   build-complete.bat
-   ```
+1. Ejecutar `InstaladorSyncFirebird-v1.0.0.exe` como administrador
+2. Seguir el wizard de instalación
+3. Ingresar:
+   - Nombre del servicio (sin espacios)
+   - Contraseña ENV_PASSWORD
+   - Contraseña CONFIG_CACHE_PASSWORD
+4. El servicio se instala y arranca automáticamente
 
-2. **Copiar al servidor de producción:**
-   - Carpeta `dist/` completa
-   - Archivo `.env.encrypted`
-   - Scripts `install-service-standalone.bat` y `uninstall-service-standalone.bat`
+**Documentación para implementadores:**
+- [GUIA_INSTALACION_IMPLEMENTADORES.md](docs/GUIA_INSTALACION_IMPLEMENTADORES.md)
+- [REFERENCIA_RAPIDA_INSTALACION.md](docs/REFERENCIA_RAPIDA_INSTALACION.md)
+- [FAQ_IMPLEMENTADORES.md](docs/FAQ_IMPLEMENTADORES.md)
 
-3. **Instalar servicio (como administrador en producción):**
-   ```bash
-   install-service-standalone.bat
-   ```
+#### Para Desarrolladores (Instalación Manual)
 
-#### 🔵 Método B: Instalación con Node.js
-**Con Node.js en el servidor de producción**
-
-1. **Compilar ejecutable:**
-   ```bash
-   npm run build
-   ```
-
-2. **Instalar servicio (como Administrador):**
-   ```bash
+**NOTA:** Los métodos antiguos (Método A y B) están obsoletos. Usar el instalador gráfico.
    npm run install-service
    ```
    O usar el script batch:
@@ -141,13 +181,49 @@ El servicio puede instalarse de **dos formas** según tus necesidades:
    install-windows-service.bat
    ```
 
+---
+
+## 📦 Compilación de Ejecutables
+
+Para distribuir el servicio sin requerir Node.js instalado, usamos **Node.js SEA (Single Executable Applications)**:
+
+```bash
+# Compilar todos los ejecutables (servicio + instaladores)
+npm run build:complete
+
+# O directamente:
+.\build-sea.bat
+```
+
+**Ejecutables generados en `dist/`:**
+- `supabase-firebird-sync.exe` - Servicio principal (~85 MB)
+- `install-service.exe` - Instalador del servicio
+- `uninstall-service.exe` - Desinstalador
+- `encrypt-env.exe` - Encriptador de .env
+
+**Método:** Node.js 22+ SEA (incluye Node.js completo embebido)
+
+📚 **Documentación detallada:** [Compilación de Ejecutables SEA](docs/COMPILACION_EJECUTABLES_SEA.md)
+
+---
+
 **📚 Documentación completa:**
 
 **Para Desarrolladores:**
 - [Guía de Instalación Detallada](docs/INSTALACION_SERVICIO_WINDOWS.md)
 - [Comparación de Métodos](docs/METODOS_INSTALACION.md)
+- [Compilación de Ejecutables SEA](docs/COMPILACION_EJECUTABLES_SEA.md)
 
 **Para Implementadores (Técnicos de Campo):**
+
+🎯 **NUEVO: Instalador Wizard (Recomendado)**
+- [📦 Instalador con Inno Setup](installer/README.md) - **Instalación con wizard gráfico**
+  - Solo 3 preguntas al usuario
+  - Instalación automática completa
+  - No requiere conocimientos técnicos
+  - Tiempo: 2-3 minutos
+
+📖 **Documentación de Instalación Manual:**
 - [📘 Guía de Instalación para Implementadores](docs/GUIA_INSTALACION_IMPLEMENTADORES.md) - Documento principal
 - [✅ Checklist de Instalación](docs/CHECKLIST_INSTALACION.md) - Lista de verificación
 - [⚡ Referencia Rápida](docs/REFERENCIA_RAPIDA_INSTALACION.md) - Comandos esenciales
@@ -164,6 +240,27 @@ net start SupabaseFirebirdSync
 # Desinstalar
 npm run uninstall-service
 ```
+
+## 🔧 Solución de Problemas
+
+Si el servicio no inicia o presenta errores:
+
+1. **Ejecutar diagnóstico automático:**
+   ```bash
+   diagnose.bat
+   ```
+
+2. **Probar en modo consola:**
+   ```bash
+   test-console.bat
+   ```
+
+3. **Revisar logs:**
+   ```bash
+   type logs\error.log
+   ```
+
+📚 **Guía completa:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ### Sincronización de Terceros
 ```bash

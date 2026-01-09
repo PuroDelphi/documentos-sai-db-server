@@ -1087,36 +1087,84 @@ class SyncService {
       // Cargar configuración desde appConfig
       this.loadConfig();
 
-      await this.initialize();
+      // Intentar inicializar Firebird con reintentos
+      let firebirdInitialized = false;
+      const maxRetries = 3;
+      const retryDelay = 5000; // 5 segundos
 
-      // Inicializar servicios de sincronización
-      await this.thirdPartySyncService.initialize();
-      await this.chartOfAccountsSyncService.initialize();
-      await this.productSyncService.initialize();
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          logger.info(`Intento ${attempt}/${maxRetries}: Inicializando conexión a Firebird...`);
+          await this.initialize();
+          firebirdInitialized = true;
+          logger.info('✅ Conexión a Firebird establecida correctamente');
+          break;
+        } catch (error) {
+          logger.error(`❌ Error en intento ${attempt}/${maxRetries} conectando a Firebird:`, error.message);
 
-      // Procesar facturas aprobadas pendientes (recuperación)
-      logger.info('Verificando facturas aprobadas pendientes de sincronización...');
-      const recoveryResult = await this.processPendingApprovedInvoices();
+          if (attempt < maxRetries) {
+            logger.info(`⏳ Reintentando en ${retryDelay / 1000} segundos...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          } else {
+            logger.error('❌ No se pudo conectar a Firebird después de varios intentos');
+            logger.error('⚠️  El servicio continuará ejecutándose en modo degradado');
+            logger.error('⚠️  Las sincronizaciones se reintentarán automáticamente');
+          }
+        }
+      }
 
-      if (recoveryResult.processed > 0) {
-        logger.info(`Recuperación completada: ${recoveryResult.processed} facturas sincronizadas, ${recoveryResult.errors} errores`);
+      // Inicializar servicios de sincronización (estos no dependen de Firebird para iniciar)
+      try {
+        await this.thirdPartySyncService.initialize();
+        await this.chartOfAccountsSyncService.initialize();
+        await this.productSyncService.initialize();
+        logger.info('✅ Servicios de sincronización inicializados');
+      } catch (error) {
+        logger.error('⚠️  Error inicializando servicios de sincronización:', error.message);
+        logger.error('⚠️  El servicio continuará ejecutándose');
+      }
+
+      // Solo procesar facturas pendientes si Firebird está disponible
+      if (firebirdInitialized) {
+        try {
+          logger.info('Verificando facturas aprobadas pendientes de sincronización...');
+          const recoveryResult = await this.processPendingApprovedInvoices();
+
+          if (recoveryResult.processed > 0) {
+            logger.info(`Recuperación completada: ${recoveryResult.processed} facturas sincronizadas, ${recoveryResult.errors} errores`);
+          }
+        } catch (error) {
+          logger.error('⚠️  Error procesando facturas pendientes:', error.message);
+          logger.error('⚠️  Se reintentará en el próximo ciclo de polling');
+        }
+      } else {
+        logger.warn('⚠️  Omitiendo recuperación de facturas pendientes (Firebird no disponible)');
       }
 
       // Configurar listener de facturas para nuevos cambios
       // Incluir callback de reconexión para recuperar facturas pendientes
       this.supabaseClient.setupRealtimeListener(
         async (invoice) => {
-          await this.processApprovedInvoice(invoice);
+          try {
+            await this.processApprovedInvoice(invoice);
+          } catch (error) {
+            logger.error('⚠️  Error procesando factura en tiempo real:', error.message);
+            logger.error('⚠️  Se reintentará en el próximo ciclo de polling');
+          }
         },
         async () => {
           // Callback ejecutado cuando se reconecta después de una caída
           logger.info('🔄 Reconexión de Realtime detectada, verificando facturas pendientes...');
-          const recoveryResult = await this.processPendingApprovedInvoices();
+          try {
+            const recoveryResult = await this.processPendingApprovedInvoices();
 
-          if (recoveryResult.processed > 0) {
-            logger.info(`✅ Recuperación post-reconexión: ${recoveryResult.processed} facturas sincronizadas, ${recoveryResult.errors} errores`);
-          } else {
-            logger.info('✅ Recuperación post-reconexión: sin facturas pendientes');
+            if (recoveryResult.processed > 0) {
+              logger.info(`✅ Recuperación post-reconexión: ${recoveryResult.processed} facturas sincronizadas, ${recoveryResult.errors} errores`);
+            } else {
+              logger.info('✅ Recuperación post-reconexión: sin facturas pendientes');
+            }
+          } catch (error) {
+            logger.error('⚠️  Error en recuperación post-reconexión:', error.message);
           }
         }
       );
@@ -1124,12 +1172,21 @@ class SyncService {
       // Iniciar sincronizaciones en segundo plano
       await this.startBackgroundSync();
 
-      logger.info('Servicio de sincronización iniciado y escuchando cambios...');
+      logger.info('='.repeat(70));
+      logger.info('✅ SERVICIO DE SINCRONIZACIÓN INICIADO');
+      logger.info('='.repeat(70));
+      logger.info(`Estado de Firebird: ${firebirdInitialized ? '✅ CONECTADO' : '❌ DESCONECTADO (modo degradado)'}`);
       logger.info(`Recuperación de facturas: ${this.syncConfig.enableRecovery ? 'HABILITADA' : 'DESHABILITADA'}`);
       logger.info(`Polling de facturas: ${this.syncConfig.enableInvoicePolling ? `HABILITADO (cada ${this.syncConfig.invoicePollingInterval / 60000} minutos)` : 'DESHABILITADO'}`);
       logger.info(`Sincronización de terceros programada cada ${this.syncConfig.thirdPartiesInterval / 60000} minutos`);
       logger.info(`Sincronización de cuentas programada cada ${this.syncConfig.chartOfAccountsInterval / 60000} minutos`);
       logger.info(`Sincronización de productos programada cada ${this.syncConfig.productsInterval / 60000} minutos`);
+      logger.info('='.repeat(70));
+
+      if (!firebirdInitialized) {
+        logger.warn('⚠️  ADVERTENCIA: El servicio está ejecutándose en modo degradado');
+        logger.warn('⚠️  Verifica la configuración de Firebird y reinicia el servicio');
+      }
     } catch (error) {
       logger.error('Error iniciando servicio:', error);
       throw error;

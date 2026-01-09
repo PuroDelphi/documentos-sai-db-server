@@ -5,6 +5,10 @@ const path = require('path');
 const encryptedEnvPath = path.join(process.cwd(), '.env.encrypted');
 const envPassword = process.env.ENV_PASSWORD;
 
+console.log('🔍 Verificando variables de entorno...');
+console.log(`   ENV_PASSWORD configurado: ${envPassword ? 'SÍ (longitud: ' + envPassword.length + ')' : 'NO'}`);
+console.log(`   Archivo .env.encrypted existe: ${fs.existsSync(encryptedEnvPath) ? 'SÍ' : 'NO'}`);
+
 if (fs.existsSync(encryptedEnvPath) && envPassword) {
   // Cargar desde archivo encriptado
   const EnvEncryption = require('../utils/envEncryption');
@@ -16,11 +20,19 @@ if (fs.existsSync(encryptedEnvPath) && envPassword) {
   } catch (error) {
     console.error('❌ Error cargando credenciales encriptadas:', error.message);
     console.error('💡 Verifica que la variable ENV_PASSWORD sea correcta');
+    console.error(`💡 Contraseña actual: ${envPassword.substring(0, 3)}... (longitud: ${envPassword.length})`);
     process.exit(1);
   }
+} else if (fs.existsSync(encryptedEnvPath) && !envPassword) {
+  console.error('❌ Archivo .env.encrypted encontrado pero ENV_PASSWORD no está configurado');
+  console.error('💡 Configura la variable de entorno ENV_PASSWORD');
+  console.error('💡 Ejecuta: [System.Environment]::SetEnvironmentVariable(\'ENV_PASSWORD\', \'TU_CONTRASEÑA\', \'Machine\')');
+  console.error('💡 Luego reinicia la terminal o ejecuta: .\\scripts\\reload-env.ps1');
+  process.exit(1);
 } else {
   // Cargar desde .env normal
   require('dotenv').config();
+  console.log('✅ Credenciales cargadas desde archivo .env');
 }
 
 /**
