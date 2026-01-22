@@ -60,6 +60,10 @@ class ChartOfAccountsSyncService {
       this.loadConfig();
 
       await this.firebirdClient.initialize();
+
+      // Verificar y crear mecanismo de versionamiento si no existe
+      await this.ensureVersioningMechanism();
+
       logger.info('Servicio de sincronización de cuentas contables inicializado');
       logger.info('Configuración de sincronización:', this.syncConfig);
     } catch (error) {
@@ -69,26 +73,152 @@ class ChartOfAccountsSyncService {
   }
 
   /**
+   * Verifica y crea el mecanismo de versionamiento en ACCT si no existe
+   */
+  async ensureVersioningMechanism() {
+    try {
+      // Verificar si el campo Version existe en ACCT
+      const checkFieldQuery = `
+        SELECT COUNT(*) as field_count
+        FROM RDB$RELATION_FIELDS
+        WHERE RDB$RELATION_NAME = 'ACCT'
+        AND RDB$FIELD_NAME = 'Version'
+      `;
+
+      const fieldCheck = await this.firebirdClient.query(checkFieldQuery);
+      const fieldExists = fieldCheck[0].FIELD_COUNT > 0;
+
+      if (!fieldExists) {
+        logger.info('Campo Version no existe en ACCT, creando mecanismo de versionamiento...');
+
+        // Crear campo Version
+        await this.firebirdClient.query('ALTER TABLE ACCT ADD "Version" INTEGER');
+        logger.info('✅ Campo Version creado en ACCT');
+
+        // Verificar si el generador existe
+        const checkGenQuery = `
+          SELECT COUNT(*) as gen_count
+          FROM RDB$GENERATORS
+          WHERE RDB$GENERATOR_NAME = 'GEN_ACCT_VERSION'
+        `;
+
+        const genCheck = await this.firebirdClient.query(checkGenQuery);
+        const genExists = genCheck[0].GEN_COUNT > 0;
+
+        if (!genExists) {
+          // Crear generador
+          await this.firebirdClient.query('CREATE GENERATOR GEN_ACCT_VERSION');
+          await this.firebirdClient.query('SET GENERATOR GEN_ACCT_VERSION TO 0');
+          logger.info('✅ Generador GEN_ACCT_VERSION creado');
+        }
+
+        // Crear trigger
+        const createTriggerSQL = `
+          CREATE OR ALTER TRIGGER TRG_ACCT_VERSION FOR ACCT
+          ACTIVE BEFORE INSERT OR UPDATE POSITION 0
+          AS
+          BEGIN
+            NEW."Version" = GEN_ID(GEN_ACCT_VERSION, 1);
+          END
+        `;
+
+        await this.firebirdClient.query(createTriggerSQL);
+        logger.info('✅ Trigger TRG_ACCT_VERSION creado');
+
+        // Crear procedimiento de inicialización
+        const createProcedureSQL = `
+          CREATE OR ALTER PROCEDURE SP_INITIALIZE_ACCT_VERSIONS
+          AS
+          DECLARE VARIABLE v_acct INTEGER;
+          DECLARE VARIABLE v_version INTEGER;
+          BEGIN
+            v_version = 0;
+            FOR SELECT ACCT
+                FROM ACCT
+                WHERE "Version" IS NULL
+                ORDER BY ACCT
+                INTO :v_acct
+            DO
+            BEGIN
+              v_version = v_version + 1;
+              UPDATE ACCT
+              SET "Version" = :v_version
+              WHERE ACCT = :v_acct;
+            END
+            IF (v_version > 0) THEN
+            BEGIN
+              EXECUTE STATEMENT 'SET GENERATOR GEN_ACCT_VERSION TO ' || :v_version;
+            END
+          END
+        `;
+
+        await this.firebirdClient.query(createProcedureSQL);
+        logger.info('✅ Procedimiento SP_INITIALIZE_ACCT_VERSIONS creado');
+
+        // Marcar que necesitamos inicializar versiones en la primera sincronización
+        this.needsVersionInitialization = true;
+      } else {
+        logger.info('✅ Mecanismo de versionamiento ya existe en ACCT');
+        this.needsVersionInitialization = false;
+      }
+    } catch (error) {
+      logger.error('Error verificando/creando mecanismo de versionamiento:', error);
+      // No lanzar error, continuar con sincronización completa
+      this.needsVersionInitialization = false;
+    }
+  }
+
+  /**
+   * Obtiene la última versión sincronizada desde Supabase
+   * @returns {Promise<number>} - Última versión sincronizada
+   */
+  async getLastSyncedVersion() {
+    try {
+      const { data, error } = await this.supabaseClient.client
+        .from('invoice_chart_of_accounts')
+        .select('firebird_version')
+        .eq('user_id', this.userUUID)
+        .order('firebird_version', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        throw new Error(`Error obteniendo última versión: ${error.message}`);
+      }
+
+      const lastVersion = data && data.length > 0 ? data[0].firebird_version : 0;
+      logger.info(`Última versión de cuentas sincronizada: ${lastVersion}`);
+      return lastVersion || 0;
+    } catch (error) {
+      logger.error('Error obteniendo última versión sincronizada de cuentas:', error);
+      return 0; // Si hay error, sincronizar desde el inicio
+    }
+  }
+
+  /**
    * Sincroniza cuentas contables desde Firebird a Supabase
    * @param {boolean} fullSync - Si es true, sincroniza todas las cuentas en los rangos
    */
   async syncFromFirebird(fullSync = false) {
     try {
-      logger.info(`Iniciando sincronización de cuentas contables (completa: ${fullSync})`);
+      logger.info(`Iniciando sincronización de cuentas contables (fullSync: ${fullSync})`);
+
+      // Obtener última versión sincronizada
+      const lastVersion = fullSync ? 0 : await this.getLastSyncedVersion();
 
       // Construir consulta con filtros configurados
-      const whereConditions = this.buildWhereConditions();
+      const whereConditions = this.buildWhereConditions(lastVersion);
       const query = `
-        SELECT 
+        SELECT
           ACCT, DESCRIPCION, TIPO, CLASS, NVEL,
           CDGOTTL, CDGOGRPO, CDGOCNTA, CDGOSBCNTA, CDGOAUX,
           BASERTNCION, PORCENRETENCION, PLANTILLA_RETENCION,
           MONETARIO, DPRTMNTOCSTO, CNCLCION, VNCMNTO, CTAS,
           FEFECTIVO, MODELO, NORMA, COD_FORMATO, COD_CONCEPTO,
-          ACTIVIDADES, APLI_IMPUESTO, ACTIVO, PRIORIDAD, MATERIALIDAD
-        FROM ACCT 
+          ACTIVIDADES, APLI_IMPUESTO, ACTIVO, PRIORIDAD, MATERIALIDAD,
+          "Version", FECHA_CREACION
+        FROM ACCT
         WHERE ${whereConditions}
-        ORDER BY ACCT
+        ORDER BY "Version" NULLS FIRST
       `;
 
       logger.info('Ejecutando consulta SQL:', query);
@@ -167,6 +297,20 @@ class ChartOfAccountsSyncService {
       }
 
       logger.info(`✅ Sincronización de cuentas completada: ${processed} procesadas, ${errors} errores`);
+
+      // Si necesitamos inicializar versiones, ejecutar el procedimiento
+      if (this.needsVersionInitialization && processed > 0) {
+        logger.info('Inicializando números de versión para registros existentes...');
+        try {
+          await this.firebirdClient.query('EXECUTE PROCEDURE SP_INITIALIZE_ACCT_VERSIONS');
+          logger.info('✅ Versiones inicializadas correctamente');
+          this.needsVersionInitialization = false;
+        } catch (error) {
+          logger.error('Error inicializando versiones:', error);
+          // No lanzar error, la próxima sincronización lo intentará de nuevo
+        }
+      }
+
       return { processed, errors };
 
     } catch (error) {
@@ -178,8 +322,13 @@ class ChartOfAccountsSyncService {
   /**
    * Construye las condiciones WHERE para la consulta
    */
-  buildWhereConditions() {
+  buildWhereConditions(lastVersion = 0) {
     const conditions = [];
+
+    // Filtro por versión (solo para sincronización incremental)
+    if (lastVersion > 0) {
+      conditions.push(`("Version" > ${lastVersion} OR "Version" IS NULL)`);
+    }
 
     // Filtro por rangos de cuentas a incluir
     if (this.syncConfig.accountRanges.length > 0) {
@@ -371,7 +520,10 @@ class ChartOfAccountsSyncService {
 
       // Configuración de sincronización
       account_range_start: range ? range.start : null,
-      account_range_end: range ? range.end : null
+      account_range_end: range ? range.end : null,
+
+      // Control de sincronización
+      firebird_version: acctRecord.Version || 0
     };
   }
 

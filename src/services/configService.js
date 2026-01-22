@@ -34,11 +34,12 @@ class ConfigService {
       const cachedConfig = this.cache.load(cachePassword);
 
       if (cachedConfig) {
-        this.config = cachedConfig;
+        // Validar y corregir intervalos del caché
+        this.config = this.validateSyncIntervals(cachedConfig);
         logger.info('✅ Configuración cargada desde caché local');
 
         // Validar que el caché tenga datos críticos
-        const hasCriticalData = this.validateCriticalData(cachedConfig);
+        const hasCriticalData = this.validateCriticalData(this.config);
 
         if (!hasCriticalData) {
           logger.warn('⚠️ Caché incompleto (faltan datos críticos de Firebird), sincronizando desde Supabase...');
@@ -64,6 +65,48 @@ class ConfigService {
   }
 
   /**
+   * Validar y corregir intervalos de sincronización
+   * Asegura que los intervalos no sean menores a 60 segundos
+   */
+  validateSyncIntervals(config) {
+    const MIN_INTERVAL = 60;
+    let corrected = false;
+
+    // Validar chart_of_accounts_sync_interval
+    if (config.chart_of_accounts_sync_interval !== null &&
+        config.chart_of_accounts_sync_interval !== undefined &&
+        config.chart_of_accounts_sync_interval < MIN_INTERVAL) {
+      logger.warn(`⚠️ chart_of_accounts_sync_interval (${config.chart_of_accounts_sync_interval}) es menor a ${MIN_INTERVAL}, ajustando a ${MIN_INTERVAL}`);
+      config.chart_of_accounts_sync_interval = MIN_INTERVAL;
+      corrected = true;
+    }
+
+    // Validar products_sync_interval
+    if (config.products_sync_interval !== null &&
+        config.products_sync_interval !== undefined &&
+        config.products_sync_interval < MIN_INTERVAL) {
+      logger.warn(`⚠️ products_sync_interval (${config.products_sync_interval}) es menor a ${MIN_INTERVAL}, ajustando a ${MIN_INTERVAL}`);
+      config.products_sync_interval = MIN_INTERVAL;
+      corrected = true;
+    }
+
+    // Validar third_parties_sync_interval
+    if (config.third_parties_sync_interval !== null &&
+        config.third_parties_sync_interval !== undefined &&
+        config.third_parties_sync_interval < MIN_INTERVAL) {
+      logger.warn(`⚠️ third_parties_sync_interval (${config.third_parties_sync_interval}) es menor a ${MIN_INTERVAL}, ajustando a ${MIN_INTERVAL}`);
+      config.third_parties_sync_interval = MIN_INTERVAL;
+      corrected = true;
+    }
+
+    if (corrected) {
+      logger.info('✅ Intervalos de sincronización validados y corregidos');
+    }
+
+    return config;
+  }
+
+  /**
    * Sincronizar configuración desde Supabase
    */
   async syncFromSupabase() {
@@ -86,15 +129,16 @@ class ConfigService {
         throw error;
       }
 
-      this.config = data;
-      
+      // Validar y corregir intervalos antes de guardar
+      this.config = this.validateSyncIntervals(data);
+
       // Guardar en caché
-      this.cache.save(data, this.cachePassword);
-      
+      this.cache.save(this.config, this.cachePassword);
+
       logger.info('✅ Configuración sincronizada desde Supabase');
     } catch (error) {
       logger.error('❌ Error sincronizando desde Supabase:', error);
-      
+
       // Si hay caché, usarlo como fallback
       if (this.config) {
         logger.warn('⚠️ Usando configuración en caché como fallback');

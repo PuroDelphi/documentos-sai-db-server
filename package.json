@@ -44,6 +44,7 @@
     "test-auto-match-full": "node src/scripts/testAutoMatchWithSync.js",
     "test-learning": "node src/scripts/testLearningSystem.js",
     "verify-auto-match": "node src/scripts/verifyAndFixAutoMatch.js",
+    "test-acct-versioning": "node scripts/test-acct-versioning.js",
     "build": "build-sea.bat",
     "build:sea": "build-sea.bat",
     "build:complete": "build-sea.bat",
