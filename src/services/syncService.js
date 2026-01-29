@@ -52,8 +52,20 @@ class SyncService {
       syncOC: appConfig.get('sync_oc', false),
       eaDocumentType: appConfig.get('ea_document_type', 'EAI'),
       ocDocumentType: appConfig.get('oc_document_type', 'OCI'),
+      ccDocumentType: appConfig.get('cc_document_type', 'CCI'), // Tipo de documento para Cuenta Cobro
       contabilizarEA: appConfig.get('contabilizar_ea', false),
     };
+  }
+
+  /**
+   * Crea un DataMapper temporal con un tipo de documento específico
+   * @param {string} documentType - Tipo de documento a usar
+   * @returns {DataMapper} - Instancia de DataMapper con el tipo de documento especificado
+   */
+  createMapperWithDocumentType(documentType) {
+    const mapper = new DataMapper();
+    mapper.documentType = documentType.substring(0, 3); // Truncar a 3 caracteres como en el constructor
+    return mapper;
   }
 
   /**
@@ -75,6 +87,10 @@ class SyncService {
         await this.ensureTipdocExists(this.syncConfig.ocDocumentType);
         logger.info(`Sincronización OC habilitada con tipo de documento: ${this.syncConfig.ocDocumentType}`);
       }
+
+      // Crear tipo de documento para Cuenta Cobro
+      await this.ensureTipdocExists(this.syncConfig.ccDocumentType);
+      logger.info(`Tipo de documento para Cuenta Cobro: ${this.syncConfig.ccDocumentType}`);
 
       logger.info('Servicio de sincronización inicializado');
       logger.info(`Creación automática de terceros: ${this.syncConfig.enableAutoThirdPartyCreation ? 'HABILITADA' : 'DESHABILITADA'}`);
@@ -154,7 +170,8 @@ class SyncService {
       'COM': 'COMPROBANTE',
       'NOT': 'NOTA CONTABLE',
       'EAI': 'ENTRADA DE ALMACEN IA',
-      'OCI': 'ORDEN DE COMPRA IA'
+      'OCI': 'ORDEN DE COMPRA IA',
+      'CCI': 'CUENTA DE COBRO IA'
     };
 
     return descriptions[documentType] || `DOCUMENTO TIPO ${documentType}`;
@@ -540,15 +557,18 @@ class SyncService {
       }
 
       // Detectar tipo de factura y rutear según corresponda
-      const invoiceType = invoiceData.invoice?.invoice_type || 'servicio'; // Por defecto 'servicio'
+      const invoiceType = (invoiceData.invoice?.invoice_type || 'servicio').toLowerCase(); // Por defecto 'servicio'
 
       logger.info(`Tipo de factura detectado: ${invoiceType}`);
 
       if (invoiceType === 'inventario') {
         // Procesar como factura de inventario
         await this.processInventoryInvoice(invoiceData);
+      } else if (invoiceType === 'cuenta cobro' || invoiceType === 'cuenta_cobro') {
+        // Procesar como Cuenta Cobro (usa el mismo código que FIA)
+        await this.processServiceInvoice(invoiceData, this.syncConfig.ccDocumentType);
       } else {
-        // Procesar como factura de servicio/libre (lógica actual)
+        // Procesar como factura de servicio/libre (lógica actual con FIA)
         await this.processServiceInvoice(invoiceData);
       }
 
@@ -571,17 +591,25 @@ class SyncService {
   /**
    * Procesa una factura de servicio/libre (lógica original)
    * @param {Object} invoiceData - Datos completos de la factura
+   * @param {string} documentType - Tipo de documento opcional (por defecto usa el configurado en appConfig)
    */
-  async processServiceInvoice(invoiceData) {
+  async processServiceInvoice(invoiceData, documentType = null) {
+    // Si se proporciona un tipo de documento, crear un mapper temporal con ese tipo
+    const mapper = documentType
+      ? this.createMapperWithDocumentType(documentType)
+      : this.dataMapper;
+
     // Verificar y ajustar NITs de terceros
     const validatedInvoiceData = await this.validateAndFixThirdParties(invoiceData);
 
-    // Obtener próximo batch
-    const batch = await this.getNextBatch();
+    // Obtener próximo batch (usar el tipo de documento específico si se proporcionó)
+    const batch = documentType
+      ? await this.getNextBatchForDocType(documentType)
+      : await this.getNextBatch();
 
     // Mapear datos con NITs validados
-    const carproenData = this.dataMapper.mapToCarproen(validatedInvoiceData, batch);
-    const carprodeData = this.dataMapper.mapToCarprode(validatedInvoiceData, batch);
+    const carproenData = mapper.mapToCarproen(validatedInvoiceData, batch);
+    const carprodeData = mapper.mapToCarprode(validatedInvoiceData, batch);
 
     // VALIDAR CUENTAS CONTABLES ANTES DE INSERTAR
     await this.validateAccountCodes(carprodeData, validatedInvoiceData.invoice.id);

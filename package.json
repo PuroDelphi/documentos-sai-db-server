@@ -45,6 +45,8 @@
     "test-learning": "node src/scripts/testLearningSystem.js",
     "verify-auto-match": "node src/scripts/verifyAndFixAutoMatch.js",
     "test-acct-versioning": "node scripts/test-acct-versioning.js",
+    "test-cuenta-cobro": "node scripts/test-cuenta-cobro.js",
+    "test-interval-validation": "node scripts/test-interval-validation.js",
     "build": "build-sea.bat",
     "build:sea": "build-sea.bat",
     "build:complete": "build-sea.bat",

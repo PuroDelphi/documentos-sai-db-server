@@ -201,6 +201,7 @@ class ConfigService {
         sync_oc: false,
         ea_document_type: 'EAI',
         oc_document_type: 'OCI',
+        cc_document_type: 'CCI', // Tipo de documento para Cuenta Cobro
         contabilizar_ea: false,
 
         // Pinecone
