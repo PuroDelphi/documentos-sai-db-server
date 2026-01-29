@@ -25,9 +25,13 @@ AppSupportURL=https://tu-sitio-web.com/soporte
 AppUpdatesURL=https://tu-sitio-web.com/actualizaciones
 
 ; Configuración del instalador
-DefaultDirName=C:\Services\SyncFirebird
+; NOTA: El directorio se establece dinámicamente en GetDefaultDirName()
+DefaultDirName={code:GetDefaultDirName}
 DefaultGroupName=Sincronización Firebird
 AllowNoIcons=yes
+; Permitir que el usuario cambie el directorio
+DisableDirPage=no
+UsePreviousAppDir=no
 OutputDir=Output
 OutputBaseFilename=InstaladorSyncFirebird-v1.0.0
 SetupIconFile=icon.ico
@@ -85,6 +89,29 @@ var
   EnvPasswordPage: TInputQueryWizardPage;
   CachePasswordPage: TInputQueryWizardPage;
   ProgressPage: TOutputProgressWizardPage;
+
+// ================================================================
+// FUNCIÓN PARA OBTENER EL DIRECTORIO DE INSTALACIÓN DINÁMICO
+// ================================================================
+function GetDefaultDirName(Param: String): String;
+var
+  ServiceName: String;
+begin
+  // Si ya se ingresó el nombre del servicio, usarlo para el directorio
+  if ServiceNamePage <> nil then
+  begin
+    ServiceName := ServiceNamePage.Values[0];
+    if ServiceName <> '' then
+      Result := 'C:\Services\' + ServiceName
+    else
+      Result := 'C:\Services\SupabaseFirebirdSync';
+  end
+  else
+  begin
+    // Valor por defecto antes de que se cree la página
+    Result := 'C:\Services\SupabaseFirebirdSync';
+  end;
+end;
 
 // ================================================================
 // INICIALIZACIÓN DEL WIZARD
@@ -165,14 +192,14 @@ begin
   if CurPageID = ServiceNamePage.ID then
   begin
     ServiceName := Trim(ServiceNamePage.Values[0]);
-    
+
     if ServiceName = '' then
     begin
       MsgBox('El nombre del servicio no puede estar vacío.', mbError, MB_OK);
       Result := False;
       Exit;
     end;
-    
+
     // Validar caracteres permitidos (solo letras, números, guiones y guiones bajos)
     if not RegExpMatch(ServiceName, '^[a-zA-Z0-9_-]+$') then
     begin
@@ -180,6 +207,9 @@ begin
       Result := False;
       Exit;
     end;
+
+    // Actualizar el directorio de instalación basado en el nombre del servicio
+    WizardForm.DirEdit.Text := 'C:\Services\' + ServiceName;
   end;
 
   // Validar contraseña del .env

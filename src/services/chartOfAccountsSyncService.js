@@ -162,8 +162,33 @@ class ChartOfAccountsSyncService {
         this.needsVersionInitialization = false;
       }
     } catch (error) {
-      logger.error('Error verificando/creando mecanismo de versionamiento:', error);
-      // No lanzar error, continuar con sincronización completa
+      logger.error('');
+      logger.error('═══════════════════════════════════════════════════════════════');
+      logger.error('❌ ADVERTENCIA: No se pudo crear el mecanismo de versionamiento en ACCT');
+      logger.error('═══════════════════════════════════════════════════════════════');
+      logger.error('');
+      logger.error('Detalles del error:', error.message);
+      logger.error('');
+      logger.error('IMPACTO:');
+      logger.error('  ⚠️  La sincronización de cuentas será COMPLETA en cada ciclo');
+      logger.error('  ⚠️  Esto puede ser MUY LENTO si hay muchas cuentas');
+      logger.error('  ⚠️  Se recomienda corregir este problema lo antes posible');
+      logger.error('');
+      logger.error('SOLUCIÓN:');
+      logger.error('  1. Verificar que el usuario de Firebird tenga permisos para:');
+      logger.error('     - ALTER TABLE (para agregar campo Version)');
+      logger.error('     - CREATE GENERATOR (para crear GEN_ACCT_VERSION)');
+      logger.error('     - CREATE TRIGGER (para crear TRG_ACCT_VERSION)');
+      logger.error('     - CREATE PROCEDURE (para crear SP_INITIALIZE_ACCT_VERSIONS)');
+      logger.error('');
+      logger.error('  2. O ejecutar manualmente el script:');
+      logger.error('     database/migrations/add_acct_versioning.sql');
+      logger.error('');
+      logger.error('El servicio continuará funcionando con sincronización completa.');
+      logger.error('═══════════════════════════════════════════════════════════════');
+      logger.error('');
+
+      // NO lanzar error, continuar con sincronización completa
       this.needsVersionInitialization = false;
     }
   }
