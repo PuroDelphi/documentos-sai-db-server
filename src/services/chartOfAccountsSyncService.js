@@ -240,7 +240,7 @@ class ChartOfAccountsSyncService {
           MONETARIO, DPRTMNTOCSTO, CNCLCION, VNCMNTO, CTAS,
           FEFECTIVO, MODELO, NORMA, COD_FORMATO, COD_CONCEPTO,
           ACTIVIDADES, APLI_IMPUESTO, ACTIVO, PRIORIDAD, MATERIALIDAD,
-          "Version", FECHA_CREACION
+          "Version"
         FROM ACCT
         WHERE ${whereConditions}
         ORDER BY "Version" NULLS FIRST
