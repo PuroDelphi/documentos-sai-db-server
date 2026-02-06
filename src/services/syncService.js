@@ -319,6 +319,27 @@ class SyncService {
   }
 
   /**
+   * Obtiene el máximo BATCH usado en CARPROEN para un tipo de documento
+   * @param {string} documentType - Tipo de documento
+   * @returns {Promise<number>} - Máximo BATCH usado
+   */
+  async getMaxUsedBatch(documentType) {
+    try {
+      const result = await this.firebirdClient.query(
+        'SELECT MAX(BATCH) as MAX_BATCH FROM CARPROEN WHERE TIPO = ?',
+        [documentType]
+      );
+
+      const maxUsedBatch = result[0]?.MAX_BATCH || 0;
+      logger.debug(`Máximo BATCH usado para ${documentType}: ${maxUsedBatch}`);
+      return maxUsedBatch;
+    } catch (error) {
+      logger.error(`Error obteniendo máximo BATCH para ${documentType}:`, error);
+      return 0;
+    }
+  }
+
+  /**
    * Ejecuta el procedimiento CXCXP_RECONTABILIZAR_DOC
    */
   async executeRecontabilizarDoc(carproenData) {
@@ -594,50 +615,118 @@ class SyncService {
    * @param {string} documentType - Tipo de documento opcional (por defecto usa el configurado en appConfig)
    */
   async processServiceInvoice(invoiceData, documentType = null) {
-    // Si se proporciona un tipo de documento, crear un mapper temporal con ese tipo
-    const mapper = documentType
-      ? this.createMapperWithDocumentType(documentType)
-      : this.dataMapper;
+    const MAX_RETRIES = 10; // Máximo 10 intentos para encontrar un consecutivo disponible
+    let attempt = 0;
+    let lastError = null;
 
-    // Verificar y ajustar NITs de terceros
-    const validatedInvoiceData = await this.validateAndFixThirdParties(invoiceData);
+    while (attempt < MAX_RETRIES) {
+      try {
+        attempt++;
 
-    // Obtener próximo batch (usar el tipo de documento específico si se proporcionó)
-    const batch = documentType
-      ? await this.getNextBatchForDocType(documentType)
-      : await this.getNextBatch();
+        if (attempt > 1) {
+          logger.warn(`Reintento ${attempt}/${MAX_RETRIES} para factura ${invoiceData.invoice.invoice_number} debido a conflicto de consecutivo`);
+        }
 
-    // Mapear datos con NITs validados
-    const carproenData = mapper.mapToCarproen(validatedInvoiceData, batch);
-    const carprodeData = mapper.mapToCarprode(validatedInvoiceData, batch);
+        // Si se proporciona un tipo de documento, crear un mapper temporal con ese tipo
+        const mapper = documentType
+          ? this.createMapperWithDocumentType(documentType)
+          : this.dataMapper;
 
-    // VALIDAR CUENTAS CONTABLES ANTES DE INSERTAR
-    await this.validateAccountCodes(carprodeData, validatedInvoiceData.invoice.id);
+        // Verificar y ajustar NITs de terceros (solo en el primer intento)
+        const validatedInvoiceData = attempt === 1
+          ? await this.validateAndFixThirdParties(invoiceData)
+          : invoiceData;
 
-    // Ejecutar inserción en transacción
-    await this.firebirdClient.transaction(async (transaction) => {
-      // Insertar en CARPROEN
-      await this.insertCarproen(transaction, carproenData);
+        // Obtener próximo batch (usar el tipo de documento específico si se proporcionó)
+        const batch = documentType
+          ? await this.getNextBatchForDocType(documentType)
+          : await this.getNextBatch();
 
-      // Insertar en CARPRODE
-      for (const entry of carprodeData) {
-        await this.insertCarprode(transaction, entry);
+        logger.info(`Intento ${attempt}: Usando consecutivo ${batch} para factura ${invoiceData.invoice.invoice_number}`);
+
+        // Mapear datos con NITs validados
+        const carproenData = mapper.mapToCarproen(validatedInvoiceData, batch);
+        const carprodeData = mapper.mapToCarprode(validatedInvoiceData, batch);
+
+        // VALIDAR CUENTAS CONTABLES ANTES DE INSERTAR (solo en el primer intento)
+        if (attempt === 1) {
+          await this.validateAccountCodes(carprodeData, validatedInvoiceData.invoice.id);
+        }
+
+        // Ejecutar inserción en transacción
+        await this.firebirdClient.transaction(async (transaction) => {
+          // Insertar en CARPROEN
+          await this.insertCarproen(transaction, carproenData);
+
+          // Insertar en CARPRODE
+          for (const entry of carprodeData) {
+            await this.insertCarprode(transaction, entry);
+          }
+        });
+
+        // Si llegamos aquí, la inserción fue exitosa
+        logger.info(`✅ Factura ${invoiceData.invoice.invoice_number} insertada exitosamente con consecutivo ${batch}`);
+
+        // Ejecutar procedimiento de recontabilización
+        await this.executeRecontabilizarDoc(carproenData);
+
+        // Actualizar consecutivo
+        await this.updateConsecutive(batch);
+
+        // Determinar mensaje de respuesta según si se creó un tercero
+        const serviceResponse = validatedInvoiceData.thirdPartyCreated
+          ? 'Ok, tercero creado automáticamente, por favor revise en el sistema'
+          : 'Ok';
+
+        // Actualizar estado en Supabase como exitoso
+        await this.supabaseClient.updateInvoiceStatus(validatedInvoiceData.invoice.id, 'SINCRONIZADO', serviceResponse);
+
+        // Salir del bucle de reintentos
+        return;
+
+      } catch (error) {
+        lastError = error;
+
+        // Verificar si es un error de PRIMARY KEY o UNIQUE constraint
+        const isPrimaryKeyError = error.message && (
+          error.message.includes('violation of PRIMARY') ||
+          error.message.includes('UNIQUE KEY') ||
+          error.message.includes('INTEG_2417') ||
+          error.gdscode === 335544665 // Firebird error code para constraint violation
+        );
+
+        if (isPrimaryKeyError) {
+          logger.warn(`⚠️ Conflicto de consecutivo detectado en intento ${attempt}/${MAX_RETRIES}: ${error.message}`);
+
+          // Forzar actualización del consecutivo antes del siguiente intento
+          const docType = documentType || this.dataMapper.getDocumentType();
+          const currentMax = await this.getMaxUsedBatch(docType);
+          const nextConsecutive = currentMax + 1;
+
+          logger.info(`Actualizando consecutivo a ${nextConsecutive} antes del siguiente intento`);
+
+          if (documentType) {
+            await this.updateConsecutiveForDocType(documentType, currentMax);
+          } else {
+            await this.updateConsecutive(currentMax);
+          }
+
+          // Esperar un poco antes de reintentar (para evitar race conditions)
+          await new Promise(resolve => setTimeout(resolve, 100 * attempt)); // Backoff exponencial
+
+          // Continuar con el siguiente intento
+          continue;
+        } else {
+          // Si no es un error de PRIMARY KEY, lanzar el error inmediatamente
+          logger.error(`❌ Error no recuperable procesando factura ${invoiceData.invoice.invoice_number}:`, error);
+          throw error;
+        }
       }
-    });
+    }
 
-    // Ejecutar procedimiento de recontabilización
-    await this.executeRecontabilizarDoc(carproenData);
-
-    // Actualizar consecutivo
-    await this.updateConsecutive(batch);
-
-    // Determinar mensaje de respuesta según si se creó un tercero
-    const serviceResponse = validatedInvoiceData.thirdPartyCreated
-      ? 'Ok, tercero creado automáticamente, por favor revise en el sistema'
-      : 'Ok';
-
-    // Actualizar estado en Supabase como exitoso
-    await this.supabaseClient.updateInvoiceStatus(validatedInvoiceData.invoice.id, 'SINCRONIZADO', serviceResponse);
+    // Si llegamos aquí, agotamos todos los reintentos
+    logger.error(`❌ Agotados ${MAX_RETRIES} intentos para procesar factura ${invoiceData.invoice.invoice_number}`);
+    throw new Error(`No se pudo insertar la factura después de ${MAX_RETRIES} intentos. Último error: ${lastError?.message}`);
   }
 
   /**
