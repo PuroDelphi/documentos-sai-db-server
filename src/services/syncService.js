@@ -32,6 +32,19 @@ class SyncService {
     this.syncConfig = null;
   }
 
+  async invoiceExistsInFirebird(idN, invc, documentType) {
+    if (!idN || !invc || !documentType) {
+      return false;
+    }
+
+    const result = await this.firebirdClient.query(
+      'SELECT FIRST 1 1 AS EXISTS_FLAG FROM CARPRODE WHERE TIPO = ? AND ID_N = ? AND INVC = ?',
+      [documentType, idN, invc]
+    );
+
+    return Array.isArray(result) && result.length > 0;
+  }
+
   /**
    * Cargar configuración desde appConfig
    */
@@ -647,6 +660,19 @@ class SyncService {
         // Mapear datos con NITs validados
         const carproenData = mapper.mapToCarproen(validatedInvoiceData, batch);
         const carprodeData = mapper.mapToCarprode(validatedInvoiceData, batch);
+
+        if (attempt === 1) {
+          const docTypeToCheck = carproenData?.TIPO || (documentType || this.dataMapper.getDocumentType());
+          const idNToCheck = carproenData?.ID_N;
+          const invcToCheck = carprodeData?.[0]?.INVC;
+
+          if (await this.invoiceExistsInFirebird(idNToCheck, invcToCheck, docTypeToCheck)) {
+            const duplicateMsg = `Duplicado omitido: ya existe en Firebird (TIPO=${docTypeToCheck}, ID_N=${idNToCheck}, INVC=${invcToCheck})`;
+            logger.warn(duplicateMsg);
+            await this.supabaseClient.updateInvoiceStatus(validatedInvoiceData.invoice.id, 'SINCRONIZADO', duplicateMsg);
+            return;
+          }
+        }
 
         // VALIDAR CUENTAS CONTABLES ANTES DE INSERTAR (solo en el primer intento)
         if (attempt === 1) {
